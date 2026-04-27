@@ -1,0 +1,39 @@
+# ============================================
+# MinerAlert — Root .gitignore
+# ============================================
+
+# NEVER commit real secrets
+**/.env
+!**/.env.example
+
+# Dependencies
+**/node_modules/
+
+# Build output
+**/dist/
+**/dist-ssr/
+**/.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+Thumbs.db
+
+# Cloud Run / Docker
+.dockerignore

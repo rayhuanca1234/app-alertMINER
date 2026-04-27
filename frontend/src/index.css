@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Default theme (light) — applied as CSS custom properties */
+  :root {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.8);
+    --bg-nav: rgba(248, 250, 252, 0.95);
+    --bg-input: #ffffff;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --accent: #2563eb;
+    --accent-glow: rgba(37, 99, 235, 0.2);
+    --accent-hover: #3b82f6;
+    --border: rgba(226, 232, 240, 0.8);
+    --border-strong: #cbd5e1;
+    --danger: #dc2626;
+    --success: #16a34a;
+    --warning: #d97706;
+    --glass: rgba(255, 255, 255, 0.85);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    --gradient-start: #2563eb;
+    --gradient-end: #0891b2;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+
+  input, textarea, select {
+    font-size: 16px !important; /* Prevent iOS zoom */
+  }
+}
+
+@layer components {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@layer utilities {
+  .animate-slideUp {
+    animation: slideUp 0.3s ease-out;
+  }
+  .animate-slideRight {
+    animation: slideRight 0.2s ease-out;
+  }
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out;
+  }
+  .animate-scaleIn {
+    animation: scaleIn 0.2s ease-out;
+  }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Leaflet overrides — theme aware */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  background-color: var(--bg-primary);
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--glass) !important;
+  color: var(--text-primary) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--border) !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--glass) !important;
+}
+
+.leaflet-popup-close-button {
+  color: var(--text-muted) !important;
+}
+
+.distance-label {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.measurement-label {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.measurement-point {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Leaflet controls hidden (we use custom controls) */
+.leaflet-control-zoom {
+  display: none !important;
+}
+
+.leaflet-control-attribution {
+  background: var(--glass) !important;
+  color: var(--text-muted) !important;
+  font-size: 8px !important;
+  padding: 2px 6px !important;
+  border-radius: 6px 0 0 0 !important;
+  border: none !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--accent) !important;
+}
+
+/* Range input styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
