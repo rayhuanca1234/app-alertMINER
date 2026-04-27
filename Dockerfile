@@ -11,13 +11,13 @@ RUN npm install --legacy-peer-deps
 
 COPY frontend/ ./
 
-# Variables de Supabase — se inyectan en el build de Vite
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
+# Variables de Supabase — valores por defecto para que el build no falle
+ARG VITE_SUPABASE_URL=https://xveiqaryuqjpodzdwjsw.supabase.co
+ARG VITE_SUPABASE_ANON_KEY=sb_publishable_LErTul8Nqcf05YhoP-e-Hw_EBtHrwOR
 
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-# Backend está en el mismo servidor → usamos la URL del propio Cloud Run
+# Backend en el mismo servidor — URL vacía usa path relativo
 ENV VITE_BACKEND_URL=""
 
 RUN npm run build
