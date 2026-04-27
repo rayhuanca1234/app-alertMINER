@@ -7,7 +7,7 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install --frozen-lockfile || npm install
+RUN npm install --legacy-peer-deps
 
 COPY frontend/ ./
 
