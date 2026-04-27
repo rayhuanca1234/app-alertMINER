@@ -6,8 +6,8 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --frozen-lockfile || npm install
 
 COPY frontend/ ./
 
@@ -31,7 +31,7 @@ WORKDIR /app
 
 # Instalar solo dependencias de producción del backend
 COPY backend/package.json backend/package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Copiar código del backend
 COPY backend/src/ ./src/
@@ -45,3 +45,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 CMD ["node", "src/server.js"]
+
