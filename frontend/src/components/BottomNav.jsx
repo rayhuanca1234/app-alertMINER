@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Home, MessageCircle, AlertTriangle, Map, User } from 'lucide-react'
 import { useAlertStore } from '../store/alertStore'
@@ -7,6 +7,28 @@ export default function BottomNav() {
   const alerts = useAlertStore(state => state.alerts)
   const activeCount = alerts.filter(a => a.is_active).length
   const location = useLocation()
+  const [inputFocused, setInputFocused] = useState(false)
+
+  // Detect when user focuses any input/textarea (keyboard open on mobile)
+  useEffect(() => {
+    const onFocus = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        setInputFocused(true)
+      }
+    }
+    const onBlur = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        // Small delay so tapping send button doesn't flash the nav
+        setTimeout(() => setInputFocused(false), 200)
+      }
+    }
+    document.addEventListener('focusin', onFocus)
+    document.addEventListener('focusout', onBlur)
+    return () => {
+      document.removeEventListener('focusin', onFocus)
+      document.removeEventListener('focusout', onBlur)
+    }
+  }, [])
 
   // Hide nav on login/register pages
   if (['/login', '/register'].includes(location.pathname)) return null
@@ -28,15 +50,31 @@ export default function BottomNav() {
 
           if (item.isAlert) {
             return (
-              <NavLink key={item.to} to={item.to} className="flex flex-col items-center -mt-6">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-red-600 rounded-full blur-lg opacity-50 animate-pulse" />
-                  <div className="relative bg-gradient-to-br from-red-500 to-red-700 p-4 rounded-full border-4 shadow-[0_0_20px_rgba(220,38,38,0.4)] hover:from-red-400 hover:to-red-600 active:scale-90 transition-all"
-                    style={{ borderColor: 'var(--bg-primary)' }}>
-                    <AlertTriangle size={28} className="text-white" />
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className="flex flex-col items-center transition-all duration-300"
+                style={{ marginTop: inputFocused ? '0' : '-24px' }}
+              >
+                {inputFocused ? (
+                  /* ── Compact pill when keyboard is open ── */
+                  <div className="relative flex items-center gap-1 bg-gradient-to-r from-red-600 to-red-700 px-3 py-1.5 rounded-full shadow-lg transition-all duration-300">
+                    <AlertTriangle size={14} className="text-white" />
+                    <span className="text-[10px] text-white font-black tracking-wider">ALERTA</span>
                   </div>
-                </div>
-                <span className="text-[9px] mt-1 text-red-400 font-black tracking-wider">ALERTA</span>
+                ) : (
+                  /* ── Full floating button ── */
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-red-600 rounded-full blur-lg opacity-50 animate-pulse" />
+                    <div className="relative bg-gradient-to-br from-red-500 to-red-700 p-4 rounded-full border-4 shadow-[0_0_20px_rgba(220,38,38,0.4)] hover:from-red-400 hover:to-red-600 active:scale-90 transition-all"
+                      style={{ borderColor: 'var(--bg-primary)' }}>
+                      <AlertTriangle size={28} className="text-white" />
+                    </div>
+                  </div>
+                )}
+                {!inputFocused && (
+                  <span className="text-[9px] mt-1 text-red-400 font-black tracking-wider">ALERTA</span>
+                )}
               </NavLink>
             )
           }

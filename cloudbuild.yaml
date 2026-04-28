@@ -1,0 +1,39 @@
+steps:
+  # Paso 1: Build la imagen Docker pasando los ARGs de Vite
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'VITE_SUPABASE_URL=${_VITE_SUPABASE_URL}'
+      - '--build-arg'
+      - 'VITE_SUPABASE_ANON_KEY=${_VITE_SUPABASE_ANON_KEY}'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/mineralert:$COMMIT_SHA'
+      - '.'
+
+  # Paso 2: Push a Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mineralert:$COMMIT_SHA']
+
+  # Paso 3: Deploy a Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'mineralert'
+      - '--image=gcr.io/$PROJECT_ID/mineralert:$COMMIT_SHA'
+      - '--region=europe-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      # Variables de entorno en RUNTIME para el backend
+      - '--set-env-vars=NODE_ENV=production'
+
+images:
+  - 'gcr.io/$PROJECT_ID/mineralert:$COMMIT_SHA'
+
+# Variables substituibles — configúralas en Cloud Build Triggers
+substitutions:
+  _VITE_SUPABASE_URL: 'https://xveiqaryuqjpodzdwjsw.supabase.co'
+  _VITE_SUPABASE_ANON_KEY: 'sb_publishable_LErTul8Nqcf05YhoP-e-Hw_EBtHrwOR'
