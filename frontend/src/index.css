@@ -195,3 +195,11 @@ input[type="range"]::-moz-range-thumb {
   border: 2px solid white;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
+
+/* ── Animated route line (marching ants) ── */
+@keyframes marchingAnts {
+  to { stroke-dashoffset: -40; }
+}
+.route-animated-dash {
+  animation: marchingAnts 0.8s linear infinite;
+}

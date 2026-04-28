@@ -6,8 +6,9 @@ import {
   Sparkles, Shield, Zap, Volume2, VolumeX, Search,
   MoreVertical, Phone, Pin, AtSign, Bell, Star,
   ChevronRight, Radio, MessageSquare, Trash2, Share2, CheckSquare, Clock,
-  Camera
+  Camera, Copy, Forward, MapPin
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { useChatStore } from '../store/chatStore'
@@ -70,6 +71,7 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
   const initials = (profile?.name || '?').slice(0, 2).toUpperCase()
   const pressTimerRef = useRef(null)
   const bubbleRef = useRef(null)
+  const navigate = useNavigate()
 
   const isActive = activeMessageId === message.id
 
@@ -158,9 +160,9 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
     >
       {/* Selection Checkbox */}
       {selectionMode && (
-        <div className="mr-2 flex items-center justify-center">
-          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-gray-400'}`}>
-            {isSelected && <CheckSquare size={12} className="text-white" />}
+        <div className="mr-2 flex items-center justify-center chat-checkbox-wrapper">
+          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isSelected ? 'bg-blue-500 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)] scale-110' : 'border-gray-400'}`}>
+            {isSelected && <CheckSquare size={12} className="text-white chat-checkbox-icon" />}
           </div>
         </div>
       )}
@@ -218,12 +220,12 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
         )}
 
         <div className={`chat-bubble ${isOwn ? 'chat-bubble-mine' : 'chat-bubble-theirs'}`}>
-          {message.reply_to_msg && (
+          {message.reply && (
             <div 
-              className="bg-black/20 rounded-md p-2 mb-2 text-xs border-l-2 border-blue-400 cursor-pointer opacity-80 hover:opacity-100 transition-opacity"
+              className="bg-black/20 rounded-md p-2 mb-2 text-xs border-l-2 border-blue-400 cursor-pointer opacity-80 hover:opacity-100 transition-opacity flex gap-2 items-center"
               onClick={(e) => {
                 e.stopPropagation()
-                const el = document.getElementById(`message-${message.reply_to_msg.id}`)
+                const el = document.getElementById(`message-${message.reply.id}`)
                 if (el) {
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
                   el.classList.add('chat-bubble-highlight')
@@ -231,8 +233,23 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
                 }
               }}
             >
-              <span className="font-bold block text-blue-300">{message.reply_to_msg.profiles?.name || 'Usuario'}</span>
-              <span className="line-clamp-1">{message.reply_to_msg.type === 'TEXT' ? message.reply_to_msg.content : 'Archivo multimedia'}</span>
+              {(message.reply.type === 'IMAGE' || message.reply.type === 'VIDEO' || message.reply.type === 'LOCATION') && message.reply.media_url && (
+                <div className="chat-reply-thumb-wrapper shrink-0">
+                  {message.reply.type === 'IMAGE' ? (
+                    <img src={message.reply.media_url} alt="" className="chat-reply-thumb" loading="lazy" />
+                  ) : message.reply.type === 'VIDEO' ? (
+                    <video src={message.reply.media_url} className="chat-reply-thumb" />
+                  ) : (
+                    <div className="w-full h-full bg-slate-700 flex items-center justify-center text-red-400">
+                      <MapPin size={20} />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <span className="font-bold block text-blue-300">{message.reply.profiles?.name || 'Usuario'}</span>
+                <span className="line-clamp-1">{message.reply.type === 'TEXT' ? message.reply.content : 'Archivo multimedia'}</span>
+              </div>
             </div>
           )}
           {message.type === 'TEXT' && (
@@ -240,7 +257,12 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
           )}
 
           {message.type === 'IMAGE' && message.media_url && (
-            <div className="chat-media-container" onClick={(e) => { e.stopPropagation(); handleEndPress(); onViewMedia(message.media_url, 'IMAGE') }}>
+            <div className="chat-media-container" onClick={(e) => { 
+              e.stopPropagation(); 
+              handleEndPress(); 
+              if (selectionMode) toggleSelection(message.id);
+              else onViewMedia(message.media_url, 'IMAGE');
+            }}>
               <img src={message.media_url} alt="Imagen" loading="lazy" className="chat-media-img" />
               <div className="chat-media-overlay">
                 <Image size={20} />
@@ -250,18 +272,82 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
           )}
 
           {message.type === 'VIDEO' && message.media_url && (
-            <div className="chat-media-container" onClick={(e) => { e.stopPropagation(); handleEndPress(); onViewMedia(message.media_url, 'VIDEO') }}>
-              <video src={message.media_url} controls preload="metadata" className="chat-media-video" />
+            <div className="chat-media-container" onClick={(e) => { 
+              e.stopPropagation(); 
+              handleEndPress(); 
+              if (selectionMode) toggleSelection(message.id);
+              else onViewMedia(message.media_url, 'VIDEO');
+            }}>
+              <video src={message.media_url} controls preload="metadata" className={`chat-media-video ${selectionMode ? 'pointer-events-none' : ''}`} />
             </div>
           )}
 
           {message.type === 'AUDIO' && message.media_url && (
-            <div className="chat-audio-container">
-              <audio src={message.media_url} controls preload="metadata" className="chat-audio-player" />
+            <div className="chat-audio-container" onClick={(e) => {
+              if (selectionMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSelection(message.id);
+              }
+            }}>
+              <audio src={message.media_url} controls preload="metadata" className={`chat-audio-player ${selectionMode ? 'pointer-events-none' : ''}`} />
             </div>
           )}
 
-          {message.type !== 'TEXT' && message.content && (
+          {message.type === 'LOCATION' && message.media_url && (() => {
+            const [lat, lng] = message.media_url.split(',').map(Number)
+            const zoom = 15
+            // OSM static tile: calculate tile at zoom 15
+            const osmThumb = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=${zoom}&size=300x130&markers=${lat},${lng},red-pushpin`
+            const handleGoMap = (e) => {
+              e.stopPropagation()
+              navigate(`/map?lat=${lat}&lng=${lng}&route=true&desc=${encodeURIComponent(message.content || 'Ubicación compartida')}`)
+            }
+            return (
+              <div className="chat-location-card" onClick={(e) => e.stopPropagation()}>
+                {/* Map Thumbnail */}
+                <div className="chat-location-thumb" onClick={handleGoMap}>
+                  <img
+                    src={osmThumb}
+                    alt="Mapa"
+                    className="chat-location-thumb-img"
+                    loading="lazy"
+                    onError={(e) => { e.target.style.display='none' }}
+                  />
+                  <div className="chat-location-pin-overlay">
+                    <div className="chat-location-pin-ring" />
+                    <MapPin size={28} className="text-red-500 drop-shadow-lg relative z-10" />
+                  </div>
+                  <div className="chat-location-tap-hint">Toca para ver en mapa</div>
+                </div>
+                {/* Info row */}
+                <div className="chat-location-footer">
+                  <div className="chat-location-text">
+                    <span className="font-bold text-xs text-blue-400 flex items-center gap-1">
+                      <MapPin size={12} /> Ubicación compartida
+                    </span>
+                    {message.content && message.content !== '📍 Ubicación compartida' && (
+                      <span className="text-xs text-gray-300 mt-0.5 block line-clamp-2">{message.content}</span>
+                    )}
+                    <span className="text-[10px] text-gray-500 mt-0.5 block">{lat.toFixed(5)}, {lng.toFixed(5)}</span>
+                  </div>
+                  <button
+                    className="chat-location-route-btn"
+                    onClick={handleGoMap}
+                    title="Enrutar desde mi posición"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                    </svg>
+                    Enrutar
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {message.type !== 'TEXT' && message.type !== 'LOCATION' && message.content && (
             <p className="chat-media-caption">{message.content}</p>
           )}
         </div>
@@ -304,7 +390,7 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
 /* ───────────────────────────────────────────── */
 /*  MEDIA UPLOAD (with Camera + Multi-Image)     */
 /* ───────────────────────────────────────────── */
-function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, disabled }) {
+function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation, disabled }) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [showOptions, setShowOptions] = useState(false)
@@ -421,6 +507,13 @@ function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, disabled }) {
                 <span className="chat-attach-desc">Grabar mensaje de voz</span>
               </div>
             </button>
+            <button type="button" onClick={() => { setShowOptions(false); onSendLocation() }} className="chat-attach-option">
+              <div className="chat-attach-icon" style={{background: 'linear-gradient(135deg, #10b981, #059669)'}}><MapPin size={18} className="text-white" /></div>
+              <div>
+                <span className="chat-attach-label">Ubicación</span>
+                <span className="chat-attach-desc">Compartir posición actual</span>
+              </div>
+            </button>
           </div>
         </>
       )}
@@ -437,7 +530,7 @@ export default function Chat() {
   const {
     messages, channels, activeChannel, loading, error,
     fetchChannels, fetchMessages, addMessage, loadMoreMessages,
-    sendTextMessage, sendMediaMessage, setActiveChannel,
+    sendTextMessage, sendMediaMessage, sendLocationMessage, forwardMessage, setActiveChannel,
     deleteMessage, updateChannelExpiration, toggleReaction
   } = useChatStore()
 
@@ -459,6 +552,7 @@ export default function Chat() {
 
   // Active message actions (long-press context)
   const [activeMessage, setActiveMessage] = useState(null) // { message, isOwn }
+  const [forwardingMessage, setForwardingMessage] = useState(null)
 
   const messagesEndRef = useRef(null)
   const scrollContainerRef = useRef(null)
@@ -619,6 +713,28 @@ export default function Chat() {
     inputRef.current?.focus()
   }
 
+  const handleLocationSend = () => {
+    if (!navigator.geolocation) {
+      alert("Tu navegador no soporta geolocalización.");
+      return;
+    }
+    setSending(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        await sendLocationMessage(text, pos.coords.latitude, pos.coords.longitude, user.id, replyToMsg?.id);
+        setText('');
+        setReplyToMsg(null);
+        setSending(false)
+        scrollToBottom()
+      },
+      (err) => {
+        alert("No se pudo obtener la ubicación: " + err.message);
+        setSending(false)
+      },
+      { enableHighAccuracy: true }
+    );
+  }
+
   const handleMediaUpload = async (file, type) => {
     setSending(true)
     const replyId = replyToMsg?.id
@@ -690,6 +806,14 @@ export default function Chat() {
         alert('Copiado al portapapeles')
       }
     } catch (e) { console.error('Share failed', e) }
+  }
+
+  const handleCopy = async (msg) => {
+    try {
+      const content = msg.type === 'TEXT' ? msg.content : msg.media_url
+      await navigator.clipboard.writeText(content)
+      alert('Copiado al portapapeles')
+    } catch (e) { console.error('Copy failed', e) }
   }
 
   // ── Active message action handlers ──
@@ -785,6 +909,12 @@ export default function Chat() {
             <button onClick={() => { handleCloseActions(); toggleSelection(activeMessage.message.id, true) }} className="chat-action-header-btn" title="Seleccionar">
               <CheckSquare size={20} />
             </button>
+            <button onClick={() => { handleCloseActions(); handleCopy(activeMessage.message) }} className="chat-action-header-btn" title="Copiar">
+              <Copy size={20} />
+            </button>
+            <button onClick={() => { handleCloseActions(); setForwardingMessage(activeMessage.message) }} className="chat-action-header-btn" title="Reenviar">
+              <Forward size={20} />
+            </button>
             <button onClick={() => { handleCloseActions(); handleShare(activeMessage.message) }} className="chat-action-header-btn" title="Compartir">
               <Share2 size={20} />
             </button>
@@ -878,9 +1008,44 @@ export default function Chat() {
         </>
       )}
 
-      {/* ── Dimmed backdrop when action bar is open ── */}
+      {/* ── DIMMED BACKDROP ── */}
       {activeMessage && (
         <div className="chat-action-backdrop" onClick={handleCloseActions} />
+      )}
+
+      {/* ── FORWARD MODAL ── */}
+      {forwardingMessage && (
+        <>
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm" onClick={() => setForwardingMessage(null)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[80] w-[90%] max-w-sm bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700/50">
+            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/80">
+              <h3 className="text-white font-bold text-sm">Reenviar a...</h3>
+              <button onClick={() => setForwardingMessage(null)} className="text-slate-400 hover:text-white"><X size={18} /></button>
+            </div>
+            <div className="max-h-60 overflow-y-auto p-2">
+              {channels.map((ch) => {
+                const ChannelIcon = channelIcons[ch.name] || Hash
+                return (
+                  <button 
+                    key={ch.id}
+                    onClick={async () => {
+                      setForwardingMessage(null)
+                      await forwardMessage(forwardingMessage, ch.id, user.id)
+                      alert(`Mensaje reenviado a ${ch.name}`)
+                    }}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-700/50 rounded-xl transition-colors text-left"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-blue-400">
+                      <ChannelIcon size={20} />
+                    </div>
+                    <span className="text-white font-medium flex-1">{ch.name}</span>
+                    <ChevronRight size={16} className="text-slate-500" />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── MESSAGES ── */}
@@ -933,15 +1098,30 @@ export default function Chat() {
         <div className="chat-input-area">
           {replyToMsg && (
             <div className="px-4 py-2 bg-slate-800/80 border-t border-slate-700/50 flex justify-between items-center z-10 w-full relative">
-              <div className="flex-1 min-w-0 border-l-4 border-blue-500 pl-2">
-                <span className="text-xs font-bold text-blue-400 block truncate">Repondiendo a {replyToMsg.profiles?.name || 'Usuario'}</span>
-                <span className="text-xs text-slate-300 truncate block">{replyToMsg.type === 'TEXT' ? replyToMsg.content : 'Multimedia'}</span>
+              <div className="flex-1 min-w-0 border-l-4 border-blue-500 pl-2 flex gap-2 items-center">
+                {(replyToMsg.type === 'IMAGE' || replyToMsg.type === 'VIDEO' || replyToMsg.type === 'LOCATION') && replyToMsg.media_url && (
+                  <div className="chat-reply-thumb-wrapper shrink-0 h-10 w-10">
+                    {replyToMsg.type === 'IMAGE' ? (
+                      <img src={replyToMsg.media_url} alt="" className="w-full h-full object-cover rounded-md" loading="lazy" />
+                    ) : replyToMsg.type === 'VIDEO' ? (
+                      <video src={replyToMsg.media_url} className="w-full h-full object-cover rounded-md" />
+                    ) : (
+                      <div className="w-full h-full bg-slate-700 flex items-center justify-center text-red-400 rounded-md">
+                        <MapPin size={20} />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-bold text-blue-400 block truncate">Repondiendo a {replyToMsg.profiles?.name || 'Usuario'}</span>
+                  <span className="text-xs text-slate-300 truncate block">{replyToMsg.type === 'TEXT' ? replyToMsg.content : 'Multimedia'}</span>
+                </div>
               </div>
               <button onClick={() => setReplyToMsg(null)} className="p-1 rounded-full hover:bg-slate-700"><X size={16} /></button>
             </div>
           )}
           <form onSubmit={handleSend} className="chat-input-form relative z-20">
-            <ChatMediaUpload onUpload={handleMediaUpload} disabled={sending}
+            <ChatMediaUpload onUpload={handleMediaUpload} onSendLocation={handleLocationSend} disabled={sending}
               onOpenCamera={() => setShowCamera(true)}
               onOpenEditor={(files) => setEditorFiles(files)} />
             <div className="chat-input-wrapper">

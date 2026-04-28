@@ -64,7 +64,7 @@ export const useChatStore = create((set, get) => ({
     // Fetch messages with profile + reply info
     const { data, error } = await supabase
       .from('messages')
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name))')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -105,7 +105,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data } = await supabase
       .from('messages')
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name))')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
       .eq('channel_id', state.activeChannel)
       .lt('created_at', oldest.created_at)
       .order('created_at', { ascending: false })
@@ -140,7 +140,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name))')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
       .single()
 
     if (error) return { error }
@@ -205,7 +205,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name))')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
       .single()
 
     if (error) return { error }
@@ -232,6 +232,103 @@ export const useChatStore = create((set, get) => ({
              message: contentLabel,
              type: 'chat',
              related_id: channelId,
+             is_read: false,
+             created_at: new Date().toISOString()
+          }
+        })
+      }
+    }
+    return { error: null }
+  },
+
+  sendLocationMessage: async (content, lat, lng, userId, replyId) => {
+    const state = get()
+    const channelId = state.activeChannel
+    const insertData = {
+      user_id: userId,
+      channel_id: channelId,
+      type: 'LOCATION',
+      content: content || '📍 Ubicación compartida',
+      media_url: `${lat},${lng}`
+    }
+    if (replyId) insertData.reply_to = replyId
+
+    const { data, error } = await supabase.from('messages')
+      .insert(insertData)
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .single()
+
+    if (error) return { error }
+    if (data) { 
+      get().addMessage(data); 
+      set({ replyTo: null }) 
+      
+      const channel = get().currentChannel
+      if (channel) {
+        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      }
+      
+      const { useNotificationStore } = await import('./notificationStore')
+      const globalChannel = useNotificationStore.getState().globalChannel
+      if (globalChannel) {
+        globalChannel.send({
+          type: 'broadcast',
+          event: 'new_notification',
+          payload: {
+             id: data.id,
+             sender_id: userId,
+             title: `💬 ${data.profiles?.name || 'Alguien'}`,
+             message: insertData.content,
+             type: 'chat',
+             related_id: channelId,
+             is_read: false,
+             created_at: new Date().toISOString()
+          }
+        })
+      }
+    }
+    return { error: null }
+  },
+
+  forwardMessage: async (message, targetChannelId, userId) => {
+    const insertData = {
+      user_id: userId,
+      channel_id: targetChannelId,
+      type: message.type,
+      content: message.content,
+      media_url: message.media_url
+    }
+
+    const { data, error } = await supabase.from('messages')
+      .insert(insertData)
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .single()
+
+    if (error) return { error }
+    
+    // Si estamos en ese canal, actualizar la UI local
+    if (data && get().activeChannel === targetChannelId) { 
+      get().addMessage(data); 
+      const channel = get().currentChannel
+      if (channel) {
+        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      }
+    }
+    
+    if (data) {
+      const { useNotificationStore } = await import('./notificationStore')
+      const globalChannel = useNotificationStore.getState().globalChannel
+      if (globalChannel) {
+        globalChannel.send({
+          type: 'broadcast',
+          event: 'new_notification',
+          payload: {
+             id: data.id,
+             sender_id: userId,
+             title: `💬 ${data.profiles?.name || 'Alguien'}`,
+             message: message.type === 'TEXT' ? message.content : 'Multimedia (Reenviado)',
+             type: 'chat',
+             related_id: targetChannelId,
              is_read: false,
              created_at: new Date().toISOString()
           }

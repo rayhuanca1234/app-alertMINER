@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Polyline, useMap } from 'react-leaflet'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import * as turf from '@turf/turf'
-import { Crosshair, AlertTriangle, Menu } from 'lucide-react'
+import { Crosshair, AlertTriangle, Menu, Navigation, X } from 'lucide-react'
 import { useAlertStore } from '../store/alertStore'
 import { useAuthStore } from '../store/authStore'
 import { useGeolocation } from '../hooks/useGeolocation'
@@ -60,6 +60,50 @@ function FitBounds({ bounds }) {
   return null
 }
 
+// Animated route line component
+function AnimatedRouteLine({ from, to }) {
+  const map = useMap()
+  const linesRef = useRef([])
+
+  useEffect(() => {
+    if (!from || !to) return
+    // Clean up previous lines
+    linesRef.current.forEach(l => map.removeLayer(l))
+    linesRef.current = []
+
+    // Glow outer line
+    const glow = L.polyline([from, to], {
+      color: 'rgba(99,102,241,0.25)',
+      weight: 14,
+      lineCap: 'round',
+    }).addTo(map)
+
+    // Solid base line
+    const base = L.polyline([from, to], {
+      color: '#6366f1',
+      weight: 4,
+      lineCap: 'round',
+    }).addTo(map)
+
+    // Animated dashed overlay (marching ants)
+    const dash = L.polyline([from, to], {
+      color: '#a5b4fc',
+      weight: 3,
+      dashArray: '12 8',
+      dashOffset: '0',
+      lineCap: 'round',
+      className: 'route-animated-dash',
+    }).addTo(map)
+
+    linesRef.current = [glow, base, dash]
+    return () => {
+      linesRef.current.forEach(l => { try { map.removeLayer(l) } catch {} })
+    }
+  }, [from, to, map])
+
+  return null
+}
+
 // Custom distance label on polyline midpoint
 function DistanceLabel({ from, to }) {
   const map = useMap()
@@ -69,7 +113,7 @@ function DistanceLabel({ from, to }) {
   useEffect(() => {
     const icon = L.divIcon({
       className: 'distance-label',
-      html: `<div style="background:rgba(15,23,42,0.9);color:#fbbf24;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:bold;border:1px solid rgba(251,191,36,0.3);white-space:nowrap;">${dist.toFixed(1)} km</div>`,
+      html: `<div style="background:rgba(15,23,42,0.9);color:#a5b4fc;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:bold;border:1px solid rgba(99,102,241,0.4);white-space:nowrap;box-shadow:0 2px 12px rgba(99,102,241,0.3);">${dist < 1 ? `${(dist*1000).toFixed(0)} m` : `${dist.toFixed(2)} km`}</div>`,
       iconSize: [0, 0],
     })
     const marker = L.marker([mid[0], mid[1]], { icon, interactive: false }).addTo(map)
@@ -90,13 +134,13 @@ function RouteInfoCard({ alert, distance, onClose }) {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(239,68,68,0.2)' }}>
-              <AlertTriangle size={20} style={{ color: 'var(--danger)' }} />
+              style={{ background: 'rgba(99,102,241,0.2)' }}>
+              <Navigation size={20} style={{ color: '#6366f1' }} />
             </div>
             <div>
-              <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Ruta a Alerta</h4>
+              <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Ruta trazada</h4>
               <p className="text-[10px] mt-0.5 max-w-[200px] truncate" style={{ color: 'var(--text-muted)' }}>
-                {alert?.description || 'Alerta de seguridad'}
+                {alert?.description || 'Ubicación compartida'}
               </p>
             </div>
           </div>
@@ -157,9 +201,12 @@ export default function MapView() {
   )
 
 
-  // Handle URL params for route tracing (when clicking alert from Home)
+  // Handle URL params for route tracing (when clicking alert from Home or chat location)
   useEffect(() => {
     const alertId = searchParams.get('alertId')
+    const routeLat = searchParams.get('lat')
+    const routeLng = searchParams.get('lng')
+    const routeDesc = searchParams.get('desc') || 'Ubicación compartida'
     const route = searchParams.get('route')
     
     if (alertId && route === 'true') {
@@ -171,7 +218,23 @@ export default function MapView() {
           [alert.latitude, alert.longitude]
         ))
         setFollowUser(false)
-        // Clean URL params
+        setSearchParams({}, { replace: true })
+      }
+    } else if (routeLat && routeLng && route === 'true') {
+      if (position) {
+        const dummyAlert = {
+          id: 'chat-location',
+          latitude: parseFloat(routeLat),
+          longitude: parseFloat(routeLng),
+          description: routeDesc,
+          created_at: new Date().toISOString()
+        }
+        setRouteAlert(dummyAlert)
+        setRouteBounds(L.latLngBounds(
+          [position.latitude, position.longitude],
+          [dummyAlert.latitude, dummyAlert.longitude]
+        ))
+        setFollowUser(false)
         setSearchParams({}, { replace: true })
       }
     }
@@ -432,19 +495,22 @@ export default function MapView() {
           </React.Fragment>
         ))}
 
-        {/* Route line to specific alert */}
+        {/* Route line to specific location — animated */}
         {routeLine && (
           <>
-            <Polyline
-              positions={[routeLine.from, routeLine.to]}
-              pathOptions={{
-                color: '#ef4444',
-                weight: 3,
-                dashArray: '12,8',
-                opacity: 0.9,
-              }}
-            />
+            <AnimatedRouteLine from={routeLine.from} to={routeLine.to} />
             <DistanceLabel from={routeLine.from} to={routeLine.to} />
+            {/* Destination marker */}
+            <Marker position={routeLine.to} icon={L.divIcon({
+              className: '',
+              html: `
+                <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+                  <div style="position:absolute;inset:0;border-radius:50%;background:rgba(99,102,241,0.35);animation:pulse 1.5s infinite;"></div>
+                  <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#3b82f6);border:3px solid white;position:relative;z-index:1;box-shadow:0 2px 10px rgba(99,102,241,0.6);"></div>
+                </div>
+              `,
+              iconSize: [40,40], iconAnchor: [20,20]
+            })} />
           </>
         )}
 
