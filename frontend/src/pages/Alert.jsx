@@ -89,6 +89,20 @@ export default function Alert() {
         }
       })
 
+      // 4. Wake up Cloud Run server and trigger Web Push broadcast
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+        fetch(`${backendUrl}/api/push/broadcast`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ alert: data })
+        }).catch(e => console.error('Error triggering push:', e));
+      } catch (e) {
+        console.error('Error with push request:', e);
+      }
+
       setSent(true)
       setCountdown(30) // Cooldown 30 seconds
       setDescription('')

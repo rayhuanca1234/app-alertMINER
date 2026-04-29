@@ -8,7 +8,6 @@ require('dotenv').config();
 
 const socketPlugin = require('./plugins/socket');
 const pushRoutes = require('./routes/push');
-const setupPushListener = require('./pushListener');
 
 // Check if we have a built frontend to serve
 const publicDir = path.join(__dirname, '../public');
@@ -42,9 +41,6 @@ async function start() {
     await fastify.register(pushRoutes, { prefix: '/api/push' });
 
     fastify.get('/api/health', async () => ({ status: 'MinerAlert OK' }));
-
-    // Start background push notification listener
-    setupPushListener(fastify);
 
     // Serve built frontend static files (production)
     if (hasFrontend) {
