@@ -107,7 +107,8 @@ function AnimatedRouteLine({ from, to }) {
 // Custom distance label on polyline midpoint
 function DistanceLabel({ from, to }) {
   const map = useMap()
-  const dist = turf.distance(turf.point(from), turf.point(to), { units: 'kilometers' })
+  // from and to are [lat, lng], but turf expects [lng, lat]
+  const dist = turf.distance(turf.point([from[1], from[0]]), turf.point([to[1], to[0]]), { units: 'kilometers' })
   const mid = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]
 
   useEffect(() => {
@@ -118,14 +119,14 @@ function DistanceLabel({ from, to }) {
     })
     const marker = L.marker([mid[0], mid[1]], { icon, interactive: false }).addTo(map)
     return () => { map.removeLayer(marker) }
-  }, [from, to, map])
+  }, [from, to, map, dist])
 
   return null
 }
 
 // Route info card component
 function RouteInfoCard({ alert, distance, onClose }) {
-  const etaMinutes = Math.round((distance / 5) * 60) // ~5 km/h walking
+  const etaMinutes = Math.round((distance / 30) * 60) // ~30 km/h in vehicle
   
   return (
     <div className="absolute bottom-20 left-4 right-4 z-[1000] animate-slideUp">
@@ -160,7 +161,7 @@ function RouteInfoCard({ alert, distance, onClose }) {
             <div className="text-lg font-black" style={{ color: 'var(--warning, #f59e0b)' }}>
               {etaMinutes < 60 ? `${etaMinutes}min` : `${Math.floor(etaMinutes / 60)}h${etaMinutes % 60}m`}
             </div>
-            <div className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>ETA caminando</div>
+            <div className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>ETA en vehículo</div>
           </div>
           <div className="flex-1 text-center p-2 rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <div className="text-lg font-black" style={{ color: 'var(--danger)' }}>
