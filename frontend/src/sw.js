@@ -15,11 +15,11 @@ self.addEventListener('push', (event) => {
     data = { title: '⚠️ MinerAlert', body: event.data.text() }
   }
 
-  const { title, body, alertId, lat, lng, desc } = data
+  const { title, body, alertId, lat, lng, desc, icon } = data
 
   const options = {
     body: body || 'Se ha reportado una nueva amenaza de seguridad',
-    icon: '/pwa-192x192.png',
+    icon: icon || '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
     vibrate: [500, 200, 500, 200, 500],
     requireInteraction: true,
@@ -55,17 +55,19 @@ self.addEventListener('notificationclick', (event) => {
     targetUrl = `/map?alertId=${alertId}&route=true`
   }
 
+  const fullUrl = new URL(targetUrl, self.location.origin).href
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       // If the app is already open in some tab/window, focus and navigate it
       for (const client of windowClients) {
-        if ('navigate' in client) {
-          client.navigate(targetUrl)
+        if ('navigate' in client && 'focus' in client) {
+          client.navigate(fullUrl)
           return client.focus()
         }
       }
       // Otherwise open a new window
-      return clients.openWindow(targetUrl)
+      return clients.openWindow(fullUrl)
     })
   )
 })

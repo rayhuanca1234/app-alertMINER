@@ -97,7 +97,12 @@ export default function Alert() {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ alert: data })
+          body: JSON.stringify({ 
+            alert: {
+              ...data,
+              avatar_url: profile?.avatar_url
+            } 
+          })
         }).catch(e => console.error('Error triggering push:', e));
       } catch (e) {
         console.error('Error with push request:', e);

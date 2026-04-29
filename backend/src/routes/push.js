@@ -48,7 +48,8 @@ module.exports = async function (fastify, opts) {
         alertId: alert.id,
         lat: alert.latitude,
         lng: alert.longitude,
-        desc: alert.description
+        desc: alert.description,
+        icon: alert.avatar_url
       });
 
       let sentCount = 0;
