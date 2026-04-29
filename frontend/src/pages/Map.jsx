@@ -66,7 +66,7 @@ function AnimatedRouteLine({ from, to }) {
   const linesRef = useRef([])
 
   useEffect(() => {
-    if (!from || !to) return
+    if (!from || !to || from.length < 2 || to.length < 2 || isNaN(from[0]) || isNaN(from[1]) || isNaN(to[0]) || isNaN(to[1])) return
     // Clean up previous lines
     linesRef.current.forEach(l => map.removeLayer(l))
     linesRef.current = []
@@ -107,6 +107,11 @@ function AnimatedRouteLine({ from, to }) {
 // Custom distance label on polyline midpoint
 function DistanceLabel({ from, to }) {
   const map = useMap()
+  
+  if (!from || !to || from.length < 2 || to.length < 2 || isNaN(from[0]) || isNaN(from[1]) || isNaN(to[0]) || isNaN(to[1])) {
+    return null;
+  }
+
   // from and to are [lat, lng], but turf expects [lng, lat]
   const dist = turf.distance(turf.point([from[1], from[0]]), turf.point([to[1], to[0]]), { units: 'kilometers' })
   const mid = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]
@@ -211,12 +216,15 @@ export default function MapView() {
     const route = searchParams.get('route')
     
     if (route === 'true') {
-      if (routeLat && routeLng && position) {
+      const parsedLat = parseFloat(routeLat)
+      const parsedLng = parseFloat(routeLng)
+
+      if (routeLat && routeLat !== 'undefined' && routeLng && routeLng !== 'undefined' && position && !isNaN(parsedLat) && !isNaN(parsedLng)) {
         // Use coordinates directly from URL (from Push Notification or Chat)
         const dummyAlert = {
           id: alertId || 'shared-location',
-          latitude: parseFloat(routeLat),
-          longitude: parseFloat(routeLng),
+          latitude: parsedLat,
+          longitude: parsedLng,
           description: routeDesc,
           created_at: new Date().toISOString()
         }
@@ -306,6 +314,8 @@ export default function MapView() {
   // Route line for alert navigation
   const routeLine = useMemo(() => {
     if (!routeAlert || !position) return null
+    if (isNaN(position.latitude) || isNaN(position.longitude) || isNaN(routeAlert.latitude) || isNaN(routeAlert.longitude)) return null
+    
     const from = [position.latitude, position.longitude]
     const to = [routeAlert.latitude, routeAlert.longitude]
     const dist = turf.distance(
