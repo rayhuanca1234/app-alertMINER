@@ -4,6 +4,7 @@ import { useAuthStore } from './store/authStore'
 import { useThemeStore } from './store/themeStore'
 import { useAlerts } from './hooks/useAlerts'
 import { useNotificationStore } from './store/notificationStore'
+import { subscribeToPushNotifications } from './lib/pushService'
 import { supabase } from './lib/supabase'
 import BottomNav from './components/BottomNav'
 import SideDrawer from './components/SideDrawer'
@@ -51,7 +52,8 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
-      // socket.connect()
+      // Subscribe to Web Push Notifications (if supported and permitted)
+      subscribeToPushNotifications(user.id)
       
       // Fetch initial notifications
       fetchNotifications(user.id)
