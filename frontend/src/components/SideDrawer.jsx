@@ -4,7 +4,7 @@ import {
   X, Home, MessageCircle, AlertTriangle, Map, User, Settings,
   Palette, Bell, MapPin, Shield, ChevronRight, Volume2, VolumeX,
   Smartphone, BellOff, Clock, Sun, Moon, Layers, Info, LogOut,
-  Radio, Compass, Type
+  Radio, Compass, Type, BookOpen
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useAlertStore } from '../store/alertStore'
@@ -427,31 +427,21 @@ export default function SideDrawer({ isOpen, onClose }) {
               )}
             </div>
 
-            {/* About Section */}
+            {/* About Section — link to /about page */}
             <div className="p-3">
-              <button onClick={() => toggleSection('about')}
+              <NavLink
+                to="/about"
+                onClick={onClose}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all hover:bg-white/5"
-                style={{ color: 'var(--text-secondary)' }}>
-                <Info size={18} />
-                <span className="text-sm font-medium flex-1 text-left">Acerca de</span>
-                <ChevronRight size={14} className={`transition-transform duration-200 ${activeSection === 'about' ? 'rotate-90' : ''}`} />
-              </button>
-
-              {activeSection === 'about' && (
-                <div className="mt-2 px-2 animate-fadeIn">
-                  <div className="p-4 rounded-xl text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                    <div className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-3 shadow-lg"
-                      style={{ background: `linear-gradient(135deg, var(--gradient-start), var(--gradient-end))` }}>
-                      <Shield size={28} className="text-white" />
-                    </div>
-                    <h4 className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>MinerAlert</h4>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>v2.0 • Puerto Maldonado, Perú</p>
-                    <p className="text-[10px] mt-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                      App de seguridad comunitaria para mineros. Alertas en tiempo real, GPS, y comunicación.
-                    </p>
-                  </div>
-                </div>
-              )}
+                style={({ isActive }) => ({
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  background: isActive ? 'var(--accent-glow)' : 'transparent',
+                })}
+              >
+                <BookOpen size={18} />
+                <span className="text-sm font-medium flex-1 text-left">Acerca de MinerAlert</span>
+                <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+              </NavLink>
             </div>
           </div>
 

@@ -21,8 +21,8 @@ export default function Home() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Exclude the current user's own alerts — they don't need to see their own
-  const activeAlerts = alerts.filter(a => a.is_active && a.user_id !== user?.id)
+  // Show all active alerts, including the current user's own
+  const activeAlerts = alerts.filter(a => a.is_active)
 
   const handleRefresh = async () => {
     setRefreshing(true)

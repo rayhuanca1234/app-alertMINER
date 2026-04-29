@@ -14,6 +14,7 @@ import MapView from './pages/Map'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import About from './pages/About'
 import { socket } from './lib/socket'
 import { Loader2, Menu, Bell } from 'lucide-react'
 
@@ -157,6 +158,7 @@ export default function App() {
           <Route path="/alert" element={<PrivateRoute><Alert /></PrivateRoute>} />
           <Route path="/map" element={<PrivateRoute><MapView /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+          <Route path="/about" element={<PrivateRoute><About /></PrivateRoute>} />
         </Routes>
       </main>
       {user && <BottomNav />}

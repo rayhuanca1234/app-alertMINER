@@ -14,7 +14,14 @@ export const useAlertStore = create(
         defaultMapLayer: 'standard',
       },
       setAlerts: (alerts) => set({ alerts }),
-      addAlert: (alert) => set((state) => ({ alerts: [alert, ...state.alerts] })),
+      addAlert: (alert) => set((state) => {
+        // Prevent duplicates: if alert already exists, update it instead of prepending
+        const exists = state.alerts.some(a => a.id === alert.id)
+        if (exists) {
+          return { alerts: state.alerts.map(a => a.id === alert.id ? { ...a, ...alert } : a) }
+        }
+        return { alerts: [alert, ...state.alerts] }
+      }),
       updateAlert: (updatedAlert) => set((state) => ({
         alerts: state.alerts.map(a => a.id === updatedAlert.id ? { ...a, ...updatedAlert } : a)
       })),

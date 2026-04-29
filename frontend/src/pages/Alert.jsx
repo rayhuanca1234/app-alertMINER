@@ -3,12 +3,16 @@ import { AlertTriangle, MapPin, Loader2, Send, Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { useGeolocation } from '../hooks/useGeolocation'
+import { useAlertStore } from '../store/alertStore'
+import { useNotificationStore } from '../store/notificationStore'
 import { socket } from '../lib/socket'
 
 
 
 export default function Alert() {
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
+  const { addAlert } = useAlertStore()
+  const { addNotificationLocally } = useNotificationStore()
   const { position, loading: gpsLoading, error: gpsError } = useGeolocation()
   const [selectedType, setSelectedType] = useState(null)
   const [description, setDescription] = useState('')
@@ -49,7 +53,25 @@ export default function Alert() {
       .single()
 
     if (!error && data) {
-      // Broadcast via Supabase to all users instantly
+      // 1. Add alert immediately to local store so sender sees it right away
+      addAlert({
+        ...data,
+        profiles: { name: profile?.name, avatar_url: profile?.avatar_url }
+      })
+
+      // 2. Add confirmation to sender's notification inbox (already read, no badge)
+      addNotificationLocally({
+        id: `sent-${data.id}`,
+        user_id: user.id,
+        title: '✅ Tu alerta fue enviada',
+        message: data.description || 'Alerta comunitaria enviada correctamente',
+        type: 'alert',
+        related_id: data.id,
+        is_read: true,
+        created_at: new Date().toISOString()
+      })
+
+      // 3. Broadcast via Supabase to all other users instantly
       const channel = supabase.channel('global-alerts', {
         config: { broadcast: { ack: true } }
       })
@@ -60,7 +82,8 @@ export default function Alert() {
             event: 'new_alert',
             payload: {
               ...data,
-              sender_name: user.user_metadata?.full_name || user.email
+              profiles: { name: profile?.name, avatar_url: profile?.avatar_url },
+              sender_name: profile?.name || user.email
             }
           })
         }

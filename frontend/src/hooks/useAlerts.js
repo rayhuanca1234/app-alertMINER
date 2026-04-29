@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAlertStore } from '../store/alertStore'
 import { useAuthStore } from '../store/authStore'
+import { sendAlertNotification } from '../lib/pushService'
 
 export function useAlerts() {
   const { alerts, setAlerts, addAlert, updateAlert, cleanExpiredAlerts, settings } = useAlertStore()
@@ -22,17 +23,17 @@ export function useAlerts() {
     }
   }
 
-  // Show browser notification
+  // Show native OS notification with alert data so click → map + route
   const showNotification = (alert) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('⚠️ ¡ALERTA MinerAlert!', {
-        body: alert.description || '¡Se ha reportado una amenaza de seguridad!',
-        icon: '/pwa-192x192.png',
-        tag: 'alert-' + alert.id,
-        requireInteraction: true,
-        vibrate: [500, 200, 500, 200, 500]
-      })
-    }
+    const isOwn = alert.user_id === user?.id
+    const title = isOwn ? '✅ Tu alerta fue enviada' : '⚠️ ¡ALERTA MinerAlert!'
+    const body  = alert.description || '¡Se ha reportado una amenaza de seguridad!'
+    sendAlertNotification(title, body, {
+      alertId: alert.id,
+      lat: alert.latitude,
+      lng: alert.longitude,
+      desc: alert.description,
+    })
   }
 
   useEffect(() => {
@@ -66,28 +67,26 @@ export function useAlerts() {
     })
       .on('broadcast', { event: 'new_alert' }, (payload) => {
         const alert = payload.payload
+        const isOwn = alert.user_id === user?.id
+
         addAlert(alert)
-        
-        // Don't alert yourself
-        if (alert.user_id !== user?.id) {
-          playAlertSound()
-          showNotification(alert)
-          
-          // Add to notification inbox
-          import('../store/notificationStore').then(module => {
-            const addLocally = module.useNotificationStore.getState().addNotificationLocally
-            addLocally({
-              id: alert.id,
-              user_id: user.id,
-              title: '⚠️ Nueva Alerta',
-              message: alert.description || 'Alerta comunitaria',
-              type: 'alert',
-              related_id: alert.id,
-              is_read: false,
-              created_at: new Date().toISOString()
-            })
+        playAlertSound()
+        showNotification(alert)
+
+        // Add to notification inbox for everyone (including sender)
+        import('../store/notificationStore').then(module => {
+          const addLocally = module.useNotificationStore.getState().addNotificationLocally
+          addLocally({
+            id: alert.id,
+            user_id: user?.id,
+            title: isOwn ? '✅ Tu alerta fue enviada' : '⚠️ Nueva Alerta',
+            message: alert.description || 'Alerta comunitaria',
+            type: 'alert',
+            related_id: alert.id,
+            is_read: isOwn, // mark own alert as already read so badge doesn't count it
+            created_at: new Date().toISOString()
           })
-        }
+        })
       })
       .on('broadcast', { event: 'update_alert' }, (payload) => {
         updateAlert(payload.payload)

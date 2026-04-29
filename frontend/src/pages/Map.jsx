@@ -194,10 +194,10 @@ export default function MapView() {
 
   useAlerts() // Subscribe to realtime alerts
 
-  // Exclude the current user's own alerts from the map — they don't need to see their own
+  // Show all active alerts on the map (including the current user's own)
   const activeAlerts = useMemo(
-    () => alerts.filter(a => a.is_active && a.latitude && a.longitude && a.user_id !== user?.id),
-    [alerts, user?.id]
+    () => alerts.filter(a => a.is_active && a.latitude && a.longitude),
+    [alerts]
   )
 
 
