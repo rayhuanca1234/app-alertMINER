@@ -14,9 +14,13 @@ COPY frontend/ ./
 # Variables de Supabase — valores por defecto para que el build no falle
 ARG VITE_SUPABASE_URL=https://xveiqaryuqjpodzdwjsw.supabase.co
 ARG VITE_SUPABASE_ANON_KEY=sb_publishable_LErTul8Nqcf05YhoP-e-Hw_EBtHrwOR
+# PEGA AQUÍ TU LLAVE PÚBLICA (es seguro porque es pública):
+ARG VITE_VAPID_PUBLIC_KEY=BEgHCjGYvKVFYHA9tCHbc2HPKRVsW5E9mYazSQlVmGSP62XDpP0Pw6ZZK2bwODKEamy6kh1z94dLiYpOZNtCglE
 
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_VAPID_PUBLIC_KEY=$VITE_VAPID_PUBLIC_KEY
+
 # Backend en el mismo servidor — URL vacía usa path relativo
 ENV VITE_BACKEND_URL=""
 
