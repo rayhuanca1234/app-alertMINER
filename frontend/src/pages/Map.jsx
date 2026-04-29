@@ -209,21 +209,11 @@ export default function MapView() {
     const routeDesc = searchParams.get('desc') || 'Ubicación compartida'
     const route = searchParams.get('route')
     
-    if (alertId && route === 'true') {
-      const alert = alerts.find(a => a.id === alertId)
-      if (alert && position) {
-        setRouteAlert(alert)
-        setRouteBounds(L.latLngBounds(
-          [position.latitude, position.longitude],
-          [alert.latitude, alert.longitude]
-        ))
-        setFollowUser(false)
-        setSearchParams({}, { replace: true })
-      }
-    } else if (routeLat && routeLng && route === 'true') {
-      if (position) {
+    if (route === 'true') {
+      if (routeLat && routeLng && position) {
+        // Use coordinates directly from URL (from Push Notification or Chat)
         const dummyAlert = {
-          id: 'chat-location',
+          id: alertId || 'shared-location',
           latitude: parseFloat(routeLat),
           longitude: parseFloat(routeLng),
           description: routeDesc,
@@ -236,6 +226,18 @@ export default function MapView() {
         ))
         setFollowUser(false)
         setSearchParams({}, { replace: true })
+      } else if (alertId && position) {
+        // Fallback: wait for alerts array to load and find it by ID
+        const alert = alerts.find(a => a.id === alertId)
+        if (alert) {
+          setRouteAlert(alert)
+          setRouteBounds(L.latLngBounds(
+            [position.latitude, position.longitude],
+            [alert.latitude, alert.longitude]
+          ))
+          setFollowUser(false)
+          setSearchParams({}, { replace: true })
+        }
       }
     }
   }, [searchParams, alerts, position])

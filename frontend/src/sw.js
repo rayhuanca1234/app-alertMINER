@@ -47,14 +47,12 @@ self.addEventListener('notificationclick', (event) => {
   const { alertId, lat, lng, desc } = event.notification.data || {}
 
   // Build URL: if we have coords → route mode; else just open the map
-  let targetUrl = '/'
-  if (alertId) {
-    targetUrl = `/map?alertId=${alertId}&route=true`
-  } else if (lat && lng) {
+  let targetUrl = '/map'
+  if (lat && lng) {
     const encodedDesc = encodeURIComponent(desc || 'Alerta')
-    targetUrl = `/map?lat=${lat}&lng=${lng}&route=true&desc=${encodedDesc}`
-  } else {
-    targetUrl = '/map'
+    targetUrl = `/map?alertId=${alertId || ''}&lat=${lat}&lng=${lng}&route=true&desc=${encodedDesc}`
+  } else if (alertId) {
+    targetUrl = `/map?alertId=${alertId}&route=true`
   }
 
   event.waitUntil(
