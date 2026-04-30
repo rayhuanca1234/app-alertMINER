@@ -130,8 +130,8 @@ function DistanceLabel({ from, to }) {
 }
 
 // Route info card component
-function RouteInfoCard({ alert, distance, onClose }) {
-  const etaMinutes = Math.round((distance / 30) * 60) // ~30 km/h in vehicle
+function RouteInfoCard({ alert, distance, onClose, etaSpeedKmh = 30 }) {
+  const etaMinutes = Math.round((distance / etaSpeedKmh) * 60) // Uses dynamic speed
   
   return (
     <div className="absolute bottom-20 left-4 right-4 z-[1000] animate-slideUp">
@@ -166,7 +166,7 @@ function RouteInfoCard({ alert, distance, onClose }) {
             <div className="text-lg font-black" style={{ color: 'var(--warning, #f59e0b)' }}>
               {etaMinutes < 60 ? `${etaMinutes}min` : `${Math.floor(etaMinutes / 60)}h${etaMinutes % 60}m`}
             </div>
-            <div className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>ETA en vehículo</div>
+            <div className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>ETA (vel={etaSpeedKmh}km/h)</div>
           </div>
           <div className="flex-1 text-center p-2 rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <div className="text-lg font-black" style={{ color: 'var(--danger)' }}>
@@ -580,6 +580,7 @@ export default function MapView() {
         <RouteInfoCard
           alert={routeAlert}
           distance={routeLine.distance}
+          etaSpeedKmh={settings.etaSpeedKmh || 30}
           onClose={() => { setRouteAlert(null); setRouteBounds(null) }}
         />
       )}
@@ -600,6 +601,19 @@ export default function MapView() {
                   className="flex-1 accent-red-500" />
                 <span className="text-sm font-bold w-12 text-right" style={{ color: 'var(--text-primary)' }}>
                   {useAlertStore.getState().settings.autoAlertRadius} km
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>Velocidad estimada (ETA)</label>
+              <div className="flex items-center gap-3">
+                <input type="range" min="5" max="120" step="5"
+                  value={useAlertStore.getState().settings.etaSpeedKmh || 30}
+                  onChange={(e) => useAlertStore.getState().updateSettings({ etaSpeedKmh: parseInt(e.target.value) })}
+                  className="flex-1 accent-blue-500" />
+                <span className="text-sm font-bold w-16 text-right" style={{ color: 'var(--text-primary)' }}>
+                  {useAlertStore.getState().settings.etaSpeedKmh || 30} km/h
                 </span>
               </div>
             </div>

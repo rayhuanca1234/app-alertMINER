@@ -12,6 +12,8 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data.json()
   } catch {
+    // MinerAlert Service Worker
+    // Cache buster: v3
     data = { title: '⚠️ MinerAlert', body: event.data.text() }
   }
 
@@ -59,15 +61,18 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If the app is already open in some tab/window, focus and navigate it
+      // If the app is already open in some tab/window, focus and send a message to navigate
       for (const client of windowClients) {
-        if ('navigate' in client && 'focus' in client) {
-          client.navigate(fullUrl)
-          return client.focus()
+        if ('focus' in client) {
+          client.focus()
+          client.postMessage({ type: 'NAVIGATE', url: targetUrl })
+          return
         }
       }
       // Otherwise open a new window
-      return clients.openWindow(fullUrl)
+      if (clients.openWindow) {
+        return clients.openWindow(fullUrl)
+      }
     })
   )
 })

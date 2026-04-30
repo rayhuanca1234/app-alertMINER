@@ -256,6 +256,58 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
             <p className="chat-bubble-text">{renderContent(message.content)}</p>
           )}
 
+          {message.type === 'MULTIPLE_MEDIA' && message.media_urls && message.media_urls.length > 0 && (
+            <div className="chat-media-grid" onClick={(e) => {
+              if (selectionMode) { e.preventDefault(); e.stopPropagation(); toggleSelection(message.id); }
+            }}>
+              {message.media_urls.slice(0, 4).map((url, i) => {
+                const isVideo = url.includes('.mp4') || url.includes('.webm') || url.includes('video')
+                return (
+                  <div key={i} className="chat-media-grid-item" onClick={(e) => {
+                    e.stopPropagation(); handleEndPress();
+                    if (!selectionMode) onViewMedia(url, isVideo ? 'VIDEO' : 'IMAGE');
+                  }}>
+                    {isVideo ? (
+                      <video src={url} className="chat-media-grid-img" />
+                    ) : (
+                      <img src={url} alt="" loading="lazy" className="chat-media-grid-img" />
+                    )}
+                    {isVideo && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <Video size={24} className="text-white opacity-80" />
+                      </div>
+                    )}
+                    {i === 3 && message.media_urls.length > 4 && (
+                      <div className="chat-media-grid-more">
+                        +{message.media_urls.length - 4}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {message.type === 'FILE' && message.file_metadata && (
+            <div className="chat-file-container" onClick={(e) => {
+              if (selectionMode) { e.preventDefault(); e.stopPropagation(); toggleSelection(message.id); }
+              else { window.open(message.media_url, '_blank'); }
+            }}>
+              <div className="chat-file-icon">
+                <Paperclip size={24} className="text-blue-500" />
+              </div>
+              <div className="chat-file-info">
+                <span className="chat-file-name line-clamp-1">{message.file_metadata.name}</span>
+                <span className="chat-file-size text-xs opacity-70">
+                  {message.file_metadata.size ? (message.file_metadata.size / 1024 / 1024).toFixed(2) + ' MB' : 'Documento'}
+                </span>
+              </div>
+              <div className="chat-file-download ml-auto bg-blue-500/20 p-2 rounded-full">
+                <ArrowDown size={16} className="text-blue-400" />
+              </div>
+            </div>
+          )}
+
           {message.type === 'IMAGE' && message.media_url && (
             <div className="chat-media-container" onClick={(e) => { 
               e.stopPropagation(); 
@@ -390,7 +442,7 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
 /* ───────────────────────────────────────────── */
 /*  MEDIA UPLOAD (with Camera + Multi-Image)     */
 /* ───────────────────────────────────────────── */
-function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation, disabled }) {
+function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation, onSendFile, disabled }) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [showOptions, setShowOptions] = useState(false)
@@ -399,6 +451,7 @@ function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation,
   const timerRef = useRef(null)
   const imgInputRef = useRef(null)
   const vidInputRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const handleImageSelect = (e) => {
     const fileList = Array.from(e.target.files || [])
@@ -409,14 +462,28 @@ function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation,
   }
 
   const handleVideoSelect = (e) => {
+    const fileList = Array.from(e.target.files || [])
+    if (fileList.length === 0) return
+    for (let f of fileList) {
+      if (f.size > 50 * 1024 * 1024) {
+        alert(`El video ${f.name} no puede superar 50MB`)
+        return
+      }
+    }
+    setShowOptions(false)
+    onOpenEditor(fileList)
+    e.target.value = ''
+  }
+
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 50 * 1024 * 1024) {
-      alert('El video no puede superar 50MB')
+      alert('El archivo no puede superar 50MB')
       return
     }
     setShowOptions(false)
-    onOpenEditor([file])
+    if (onSendFile) onSendFile(file)
     e.target.value = ''
   }
 
@@ -477,7 +544,8 @@ function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation,
           <div className="chat-attach-backdrop" onClick={() => setShowOptions(false)} />
           <div className="chat-attach-menu">
             <input type="file" ref={imgInputRef} accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
-            <input type="file" ref={vidInputRef} accept="video/*" className="hidden" onChange={handleVideoSelect} />
+            <input type="file" ref={vidInputRef} accept="video/*" multiple className="hidden" onChange={handleVideoSelect} />
+            <input type="file" ref={fileInputRef} accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" className="hidden" onChange={handleFileSelect} />
 
             <button type="button" onClick={() => { setShowOptions(false); onOpenCamera() }} className="chat-attach-option">
               <div className="chat-attach-icon" style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)'}}><Camera size={18} className="text-white" /></div>
@@ -498,6 +566,13 @@ function ChatMediaUpload({ onUpload, onOpenCamera, onOpenEditor, onSendLocation,
               <div>
                 <span className="chat-attach-label">Video</span>
                 <span className="chat-attach-desc">Máximo 50MB</span>
+              </div>
+            </button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="chat-attach-option">
+              <div className="chat-attach-icon" style={{background:'rgba(245, 158, 11, 0.1)', color:'#f59e0b'}}><Paperclip size={18} /></div>
+              <div>
+                <span className="chat-attach-label">Documento</span>
+                <span className="chat-attach-desc">PDF, Word, Excel</span>
               </div>
             </button>
             <button type="button" onClick={startRecording} className="chat-attach-option">
@@ -735,29 +810,39 @@ export default function Chat() {
     );
   }
 
-  const handleMediaUpload = async (file, type) => {
-    setSending(true)
+  const handleMediaUpload = (file, type) => {
     const replyId = replyToMsg?.id
     setReplyToMsg(null)
-    const { error: uploadErr } = await sendMediaMessage(file, type, user.id, replyId)
-    if (uploadErr) {
-      alert('Error al subir archivo: ' + uploadErr.message)
-    } else {
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
-    }
-    setSending(false)
+    sendMediaMessage(file, type, user.id, replyId).then((res) => {
+      if (res && res.error) {
+        alert('Error al subir archivo: ' + res.error.message)
+      } else {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+      }
+    })
   }
 
   // Called from MediaEditor: send multiple files with caption
-  const handleEditorSend = async (files, caption) => {
+  const handleEditorSend = (files, caption) => {
     setEditorFiles(null)
-    setSending(true)
-    for (const file of files) {
-      const type = file.type.startsWith('image') ? 'IMAGE' : file.type.startsWith('video') ? 'VIDEO' : 'AUDIO'
-      await sendMediaMessage(file, type, user.id, null, caption)
-    }
-    setSending(false)
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    if (!files || files.length === 0) return
+    const replyId = replyToMsg?.id
+    setReplyToMsg(null)
+    
+    const type = files[0].type.startsWith('video') ? 'VIDEO' : 'IMAGE'
+    useChatStore.getState().sendMultipleMediaMessage(files, type, user.id, replyId, caption).then((res) => {
+      if (res && res.error) alert('Error al enviar multimedia: ' + res.error.message)
+      else setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    })
+  }
+
+  const handleFileSend = (file) => {
+    const replyId = replyToMsg?.id
+    setReplyToMsg(null)
+    useChatStore.getState().sendFileMessage(file, user.id, replyId).then((res) => {
+      if (res && res.error) alert('Error al enviar archivo: ' + res.error.message)
+      else setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    })
   }
 
   // Camera capture callback: open files in the editor
@@ -894,7 +979,7 @@ export default function Chat() {
       ) : activeMessage ? (
         /* ── ACTION BAR (when message is long-pressed) ── */
         <div className="chat-header chat-action-header z-[60]">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button onClick={handleCloseActions} className="chat-action-header-btn">
               <X size={20} />
             </button>
@@ -902,7 +987,7 @@ export default function Chat() {
               {activeMessage.message.profiles?.name || 'Mensaje'}
             </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="chat-action-buttons-wrapper">
             <button onClick={() => { handleCloseActions(); setReplyToMsg(activeMessage.message) }} className="chat-action-header-btn" title="Responder">
               <MessageSquare size={20} />
             </button>
@@ -1121,7 +1206,7 @@ export default function Chat() {
             </div>
           )}
           <form onSubmit={handleSend} className="chat-input-form relative z-20">
-            <ChatMediaUpload onUpload={handleMediaUpload} onSendLocation={handleLocationSend} disabled={sending}
+            <ChatMediaUpload onUpload={handleMediaUpload} onSendLocation={handleLocationSend} onSendFile={handleFileSend} disabled={sending}
               onOpenCamera={() => setShowCamera(true)}
               onOpenEditor={(files) => setEditorFiles(files)} />
             <div className="chat-input-wrapper">

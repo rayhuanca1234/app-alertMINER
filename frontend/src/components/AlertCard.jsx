@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Clock, MapPin, Navigation } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
 
 function timeAgo(date) {
   const now = new Date()
@@ -13,7 +14,10 @@ function timeAgo(date) {
 
 export default function AlertCard({ alert, userPosition }) {
   const navigate = useNavigate()
+  const { user, profile: userProfile } = useAuthStore()
   const profile = alert.profiles
+  // Bulletproof check: either user_id matches, or names match exactly
+  const isOwn = (user && alert.user_id === user.id) || (userProfile && profile && userProfile.name === profile.name)
   const initials = (profile?.name || 'A').slice(0, 2).toUpperCase()
 
   // Calculate distance if we have user position
@@ -36,18 +40,22 @@ export default function AlertCard({ alert, userPosition }) {
 
   return (
     <div onClick={handleClick}
-      className="relative p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+      className={`relative p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${isOwn ? 'ring-1 ring-emerald-500/30' : ''}`}
       style={{
-        background: isVeryNear
-          ? 'rgba(127, 29, 29, 0.3)'
-          : isNear
-            ? 'rgba(120, 53, 15, 0.15)'
-            : 'var(--bg-card)',
-        borderColor: isVeryNear
-          ? 'rgba(239, 68, 68, 0.6)'
-          : isNear
-            ? 'rgba(245, 158, 11, 0.4)'
-            : 'var(--border)',
+        background: isOwn 
+          ? 'linear-gradient(to right, rgba(16, 185, 129, 0.08), rgba(6, 78, 59, 0.05))'
+          : isVeryNear
+            ? 'rgba(127, 29, 29, 0.3)'
+            : isNear
+              ? 'rgba(120, 53, 15, 0.15)'
+              : 'var(--bg-card)',
+        borderColor: isOwn 
+          ? 'rgba(16, 185, 129, 0.4)'
+          : isVeryNear
+            ? 'rgba(239, 68, 68, 0.6)'
+            : isNear
+              ? 'rgba(245, 158, 11, 0.4)'
+              : 'var(--border)',
         boxShadow: isVeryNear ? '0 0 20px rgba(220,38,38,0.2)' : 'none',
       }}>
       
@@ -69,9 +77,16 @@ export default function AlertCard({ alert, userPosition }) {
           )}
 
           <div>
-            <h3 className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
-              {profile?.name || 'Minero Anónimo'}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm" style={{ color: isOwn ? '#34d399' : 'var(--text-primary)' }}>
+                {isOwn ? 'Tú (Tu alerta)' : profile?.name || 'Minero Anónimo'}
+              </h3>
+              {isOwn && (
+                <span className="bg-emerald-500/20 text-emerald-400 text-[9px] px-1.5 py-0.5 rounded border border-emerald-500/30">
+                  Creador
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-0.5">
               <Clock size={12} style={{ color: 'var(--text-muted)' }} />
               <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{timeAgo(alert.created_at)}</span>

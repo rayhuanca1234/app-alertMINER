@@ -12,6 +12,7 @@ export const useAlertStore = create(
         vibrationEnabled: true,
         alertExpiryMinutes: 60, // 1 hour default
         defaultMapLayer: 'standard',
+        etaSpeedKmh: 30, // km/h - default ETA speed
       },
       setAlerts: (alerts) => set({ alerts }),
       addAlert: (alert) => set((state) => {

@@ -64,7 +64,7 @@ export const useChatStore = create((set, get) => ({
     // Fetch messages with profile + reply info
     const { data, error } = await supabase
       .from('messages')
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -105,7 +105,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data } = await supabase
       .from('messages')
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
       .eq('channel_id', state.activeChannel)
       .lt('created_at', oldest.created_at)
       .order('created_at', { ascending: false })
@@ -140,7 +140,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) return { error }
@@ -179,6 +179,25 @@ export const useChatStore = create((set, get) => ({
   sendMediaMessage: async (file, type, userId, replyId, caption) => {
     const state = get()
     const channelId = state.activeChannel
+    
+    // Optimistic UI
+    const localId = 'temp-' + Date.now()
+    const contentLabel = caption || (type === 'IMAGE' ? '📷 Imagen' : type === 'VIDEO' ? '🎬 Video' : '🎤 Audio')
+    const localUrl = URL.createObjectURL(file)
+    
+    const tempMessage = {
+      id: localId,
+      user_id: userId,
+      channel_id: channelId,
+      type,
+      content: contentLabel,
+      media_url: localUrl,
+      status: 'uploading',
+      created_at: new Date().toISOString(),
+      profiles: { name: 'Tú' }
+    }
+    get().addMessage(tempMessage)
+
     const fileExt = file.name?.split('.').pop() || (type === 'AUDIO' ? 'webm' : 'bin')
     const filePath = `${channelId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
 
@@ -187,6 +206,7 @@ export const useChatStore = create((set, get) => ({
       .upload(filePath, file, { upsert: false })
 
     if (uploadError) {
+      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
       return { error: uploadError }
     }
 
@@ -205,12 +225,16 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
       .single()
 
-    if (error) return { error }
+    if (error) {
+      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+      return { error }
+    }
+
     if (data) { 
-      get().addMessage(data); 
+      set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
       set({ replyTo: null }) 
       
       const channel = get().currentChannel
@@ -241,6 +265,137 @@ export const useChatStore = create((set, get) => ({
     return { error: null }
   },
 
+  sendMultipleMediaMessage: async (files, type, userId, replyId, caption) => {
+    const state = get()
+    const channelId = state.activeChannel
+
+    // Optimistic UI update: local message
+    const localId = 'temp-' + Date.now()
+    const localUrls = files.map(f => URL.createObjectURL(f))
+    const tempMessage = {
+      id: localId,
+      user_id: userId,
+      channel_id: channelId,
+      type: files.length > 1 ? 'MULTIPLE_MEDIA' : type,
+      content: caption || 'Subiendo multimedia...',
+      media_urls: localUrls,
+      status: 'uploading',
+      created_at: new Date().toISOString(),
+      profiles: { name: 'Tú' }
+    }
+    get().addMessage(tempMessage)
+
+    // Upload files to Supabase
+    const uploadPromises = files.map(async (file) => {
+      const fileExt = file.name?.split('.').pop() || 'bin'
+      const filePath = `${channelId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
+      const { error } = await supabase.storage.from('chat-media').upload(filePath, file)
+      if (error) return null
+      const { data } = supabase.storage.from('chat-media').getPublicUrl(filePath)
+      return data?.publicUrl
+    })
+
+    const urls = await Promise.all(uploadPromises)
+    const validUrls = urls.filter(Boolean)
+
+    if (validUrls.length === 0) {
+      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+      return { error: new Error('Error subiendo archivos') }
+    }
+
+    const insertData = {
+      user_id: userId,
+      channel_id: channelId,
+      type: validUrls.length > 1 ? 'MULTIPLE_MEDIA' : type,
+      content: caption || (type === 'IMAGE' ? '📷 Imagen' : '🎬 Video'),
+      media_urls: validUrls
+    }
+    if (validUrls.length === 1) {
+      insertData.media_url = validUrls[0]
+      insertData.media_urls = null
+    }
+    if (replyId) insertData.reply_to = replyId
+
+    const { data, error } = await supabase.from('messages')
+      .insert(insertData)
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .single()
+
+    if (error) {
+      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+      return { error }
+    }
+    
+    // Replace temp message
+    set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
+    set({ replyTo: null })
+    
+    const channel = get().currentChannel
+    if (channel) {
+      channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+    }
+    return { error: null }
+  },
+
+  sendFileMessage: async (file, userId, replyId) => {
+    const state = get()
+    const channelId = state.activeChannel
+
+    // Optimistic UI
+    const localId = 'temp-' + Date.now()
+    const tempMessage = {
+      id: localId,
+      user_id: userId,
+      channel_id: channelId,
+      type: 'FILE',
+      content: file.name,
+      file_metadata: { name: file.name, size: file.size },
+      status: 'uploading',
+      created_at: new Date().toISOString(),
+      profiles: { name: 'Tú' }
+    }
+    get().addMessage(tempMessage)
+
+    const fileExt = file.name?.split('.').pop() || 'bin'
+    const filePath = `${channelId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage.from('chat-media').upload(filePath, file)
+    if (uploadError) {
+      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+      return { error: uploadError }
+    }
+
+    const { data: urlData } = supabase.storage.from('chat-media').getPublicUrl(filePath)
+    
+    const insertData = {
+      user_id: userId,
+      channel_id: channelId,
+      type: 'FILE',
+      content: '📎 Documento adjunto',
+      media_url: urlData?.publicUrl,
+      file_metadata: { name: file.name, size: file.size }
+    }
+    if (replyId) insertData.reply_to = replyId
+
+    const { data, error } = await supabase.from('messages')
+      .insert(insertData)
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .single()
+
+    if (error) {
+      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+      return { error }
+    }
+
+    set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
+    set({ replyTo: null })
+    const channel = get().currentChannel
+    if (channel) {
+      channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+    }
+    return { error: null }
+  },
+
   sendLocationMessage: async (content, lat, lng, userId, replyId) => {
     const state = get()
     const channelId = state.activeChannel
@@ -255,7 +410,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) return { error }
@@ -301,7 +456,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url)')
+      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) return { error }

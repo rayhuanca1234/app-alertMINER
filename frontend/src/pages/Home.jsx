@@ -110,6 +110,7 @@ export default function Home() {
               key={alert.id} 
               alert={alert} 
               userPosition={position}
+              currentUser={user}
             />
           ))
         )}
