@@ -872,8 +872,8 @@
   overflow: hidden;
 }
 .chat-action-header-btn::after {
-  content: " \;
- position: absolute;
+  content: "";
+  position: absolute;
  inset: 0;
  background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 60%);
  opacity: 0;

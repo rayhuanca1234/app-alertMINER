@@ -212,7 +212,6 @@ export const useChatStore = create((set, get) => ({
 
     const { data: urlData } = supabase.storage.from('chat-media').getPublicUrl(filePath)
     const mediaUrl = urlData?.publicUrl
-    const contentLabel = caption || (type === 'IMAGE' ? '📷 Imagen' : type === 'VIDEO' ? '🎬 Video' : '🎤 Audio')
 
     const insertData = {
       user_id: userId,
