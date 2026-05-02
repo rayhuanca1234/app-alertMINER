@@ -77,8 +77,32 @@ function VoiceRecorderBar({
   const chunksRef        = useRef([])
   const timerRef         = useRef(null)
   const streamRef        = useRef(null)
+  const waveAnimRef      = useRef(null)
+  const waveBarsRef      = useRef(Array.from({ length: 32 }, () => 4))
 
   const fmt = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+
+  // Smooth waveform animation loop
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      let frame = 0
+      const animate = () => {
+        frame++
+        waveBarsRef.current = waveBarsRef.current.map((_, i) => {
+          const base = Math.sin((frame * 0.08) + (i * 0.4)) * 12
+          const secondary = Math.cos((frame * 0.12) + (i * 0.7)) * 6
+          const noise = Math.sin((frame * 0.2) + (i * 1.3)) * 4
+          return Math.max(3, Math.abs(base + secondary + noise) + 3)
+        })
+        setWavePhase(frame)
+        waveAnimRef.current = requestAnimationFrame(animate)
+      }
+      waveAnimRef.current = requestAnimationFrame(animate)
+      return () => cancelAnimationFrame(waveAnimRef.current)
+    } else {
+      cancelAnimationFrame(waveAnimRef.current)
+    }
+  }, [isRecording, isPaused])
 
   const startRecording = async () => {
     try {
@@ -95,7 +119,6 @@ function VoiceRecorderBar({
       setRecordingTime(0)
       timerRef.current = setInterval(() => {
         setRecordingTime(t => t + 1)
-        setWavePhase(p => p + 1)
       }, 1000)
     } catch {
       alert('No se pudo acceder al micrófono.')
@@ -108,7 +131,6 @@ function VoiceRecorderBar({
       mediaRecorderRef.current.resume()
       timerRef.current = setInterval(() => {
         setRecordingTime(t => t + 1)
-        setWavePhase(p => p + 1)
       }, 1000)
       setIsPaused(false)
     } else {
@@ -120,6 +142,7 @@ function VoiceRecorderBar({
 
   const cancelRecording = () => {
     clearInterval(timerRef.current)
+    cancelAnimationFrame(waveAnimRef.current)
     if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current.stop()
     streamRef.current?.getTracks().forEach(t => t.stop())
     chunksRef.current = []
@@ -132,6 +155,7 @@ function VoiceRecorderBar({
   const sendRecording = () => {
     if (!mediaRecorderRef.current) return
     clearInterval(timerRef.current)
+    cancelAnimationFrame(waveAnimRef.current)
     const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
     mediaRecorderRef.current.onstop = () => {
       const blob = new Blob(chunksRef.current, { type: mimeType })
@@ -148,33 +172,46 @@ function VoiceRecorderBar({
 
   const hasText = text.trim().length > 0
 
-  // ── Recording bar UI ──
+  // ── Recording bar UI — Premium Design ──
   if (isRecording) {
     return (
       <div className="voice-recorder-bar">
+        {/* Animated background glow */}
+        <div className="voice-rec-bg-glow" />
+        
+        {/* Cancel button */}
         <button type="button" className="voice-rec-btn voice-rec-delete" onClick={cancelRecording} title="Cancelar">
-          <Trash2 size={20} />
+          <Trash2 size={18} />
         </button>
+        
+        {/* Recording indicator + waveform */}
         <div className="voice-rec-wave-area">
-          <div className={`voice-rec-dot ${isPaused ? '' : 'voice-rec-dot-pulse'}`} />
+          <div className="voice-rec-indicator">
+            <div className={`voice-rec-dot ${isPaused ? '' : 'voice-rec-dot-pulse'}`} />
+            <span className="voice-rec-label">{isPaused ? 'Pausado' : 'Grabando'}</span>
+          </div>
           <div className="voice-rec-waveform">
-            {Array.from({ length: 22 }, (_, i) => (
+            {waveBarsRef.current.map((h, i) => (
               <div key={i} className="voice-rec-bar"
                 style={{
-                  height: `${isPaused ? 6 : Math.max(4, Math.abs(Math.sin((wavePhase + i) * 0.6) * 20) + 4)}px`,
-                  opacity: isPaused ? 0.4 : 1,
-                  transition: 'height 0.3s ease'
+                  height: `${isPaused ? 3 : h}px`,
+                  opacity: isPaused ? 0.3 : 0.5 + (h / 40),
+                  background: `hsl(${200 + (i * 4)}, 90%, ${55 + (h * 0.5)}%)`,
                 }}
               />
             ))}
           </div>
           <span className="voice-rec-timer">{fmt(recordingTime)}</span>
         </div>
+        
+        {/* Pause / Resume */}
         <button type="button" className="voice-rec-btn voice-rec-pause" onClick={pauseRecording} title={isPaused ? 'Reanudar' : 'Pausar'}>
-          {isPaused ? <Mic size={18} /> : <Pause size={18} />}
+          {isPaused ? <Mic size={16} /> : <Pause size={16} />}
         </button>
+        
+        {/* Send */}
         <button type="button" className="voice-rec-btn voice-rec-send" onClick={sendRecording} title="Enviar audio">
-          <Send size={20} />
+          <Send size={18} />
         </button>
       </div>
     )
@@ -433,7 +470,14 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
                 return (
                   <div key={i} className="chat-media-grid-item" onClick={(e) => {
                     e.stopPropagation(); handleEndPress();
-                    if (!selectionMode) onViewMedia(url, isVideo ? 'VIDEO' : 'IMAGE');
+                    if (!selectionMode) {
+                      // Open gallery with ALL media, starting from clicked index
+                      const allMedia = message.media_urls.map(u => ({
+                        url: u,
+                        type: (u.includes('.mp4') || u.includes('.webm') || u.includes('video')) ? 'VIDEO' : 'IMAGE'
+                      }))
+                      onViewMedia(allMedia, i)
+                    }
                   }}>
                     {isVideo ? (
                       <video src={url} className="chat-media-grid-img" />
@@ -481,7 +525,7 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
               e.stopPropagation(); 
               handleEndPress(); 
               if (selectionMode) toggleSelection(message.id);
-              else onViewMedia(message.media_url, 'IMAGE');
+              else onViewMedia([{ url: message.media_url, type: 'IMAGE' }], 0);
             }}>
               <img src={message.media_url} alt="Imagen" loading="lazy" className="chat-media-img" />
               <div className="chat-media-overlay">
@@ -496,7 +540,7 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
               e.stopPropagation(); 
               handleEndPress(); 
               if (selectionMode) toggleSelection(message.id);
-              else onViewMedia(message.media_url, 'VIDEO');
+              else onViewMedia([{ url: message.media_url, type: 'VIDEO' }], 0);
             }}>
               <video src={message.media_url} controls preload="metadata" className={`chat-media-video ${selectionMode ? 'pointer-events-none' : ''}`} />
             </div>
@@ -789,7 +833,7 @@ export default function Chat() {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [replyToMsg, setReplyToMsg] = useState(null)
-  const [mediaToView, setMediaToView] = useState(null)
+  const [mediaToView, setMediaToView] = useState(null) // { mediaList: [...], initialIndex: 0 }
   const [showCamera, setShowCamera] = useState(false)
   const [editorFiles, setEditorFiles] = useState(null)
 
@@ -1327,7 +1371,7 @@ export default function Chat() {
                 onDelete={(id) => deleteMessage(id)}
                 onShare={handleShare}
                 onReply={(m) => setReplyToMsg(m)}
-                onViewMedia={(url, type) => setMediaToView({ url, type })}
+                onViewMedia={(mediaList, initialIndex) => setMediaToView({ mediaList, initialIndex })}
                 activeMessageId={activeMessage?.message?.id}
                 onOpenActions={handleOpenActions}
                 onCloseActions={handleCloseActions}
@@ -1393,7 +1437,7 @@ export default function Chat() {
       )}
       {/* Media Viewer Overlay */}
       {mediaToView && (
-        <MediaViewer src={mediaToView.url} type={mediaToView.type} onClose={() => setMediaToView(null)} />
+        <MediaViewer mediaList={mediaToView.mediaList} initialIndex={mediaToView.initialIndex || 0} onClose={() => setMediaToView(null)} />
       )}
 
       {/* Camera */}

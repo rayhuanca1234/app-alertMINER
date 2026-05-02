@@ -1016,236 +1016,174 @@
 }
 
 [data-theme="dark"] .chat-bubble-theirs {
- background: rgba(30, 41, 59, 0.8) !important;
- border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(30, 41, 59, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
-/* ─────────────────────────────────────────────── */
-/*  VOICE RECORDER BAR — WhatsApp-style            */
-/* ─────────────────────────────────────────────── */
-
-/* The recording bar replaces the form entirely */
+/* voice recorder premium 2050 */
 .voice-recorder-bar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  height: 60px;
-  background: var(--bg-secondary, #1e293b);
-  border-top: 1px solid rgba(255,255,255,0.07);
-  animation: voiceBarIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(15,23,42,0.97), rgba(30,41,59,0.97));
+  backdrop-filter: blur(20px) saturate(1.5);
+  border-top: 1px solid rgba(99,102,241,0.2);
+  animation: voiceBarIn 0.35s cubic-bezier(0.16,1,0.3,1);
+  overflow: hidden;
+  z-index: 10;
 }
-
+.voice-rec-bg-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,rgba(99,102,241,0.05) 0%,rgba(139,92,246,0.1) 25%,rgba(59,130,246,0.08) 50%,rgba(99,102,241,0.05) 75%,rgba(139,92,246,0.1) 100%);
+  background-size: 200% 100%;
+  animation: glowShift 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes glowShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
 @keyframes voiceBarIn {
-  from { opacity: 0; transform: translateY(10px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-
-/* Wave area (dot + bars + timer) */
 .voice-rec-wave-area {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 24px;
-  padding: 6px 14px;
-  min-width: 0;
-  height: 44px;
+  gap: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 20px;
+  padding: 8px 14px;
+  min-height: 42px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
-
-/* Red pulsing recording dot */
-.voice-rec-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ef4444;
+.voice-rec-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
 }
+.voice-rec-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #ef4444;
+  opacity: 0.9;
+}
+.voice-rec-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239,68,68,0.6);
+}
 .voice-rec-dot-pulse {
-  animation: recPulse 1s ease-in-out infinite;
+  animation: dotPulse 1.2s ease-in-out infinite;
 }
-@keyframes recPulse {
-  0%,100% { transform: scale(1);   opacity: 1; }
-  50%      { transform: scale(1.5); opacity: 0.6; }
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+  50% { opacity: 0.4; transform: scale(0.6); box-shadow: 0 0 12px rgba(239,68,68,0.8); }
 }
-
-/* Waveform bars */
 .voice-rec-waveform {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1.5px;
   height: 28px;
   overflow: hidden;
 }
 .voice-rec-bar {
-  width: 3px;
-  min-height: 4px;
+  flex-shrink: 0;
+  width: 2.5px;
+  border-radius: 4px;
+  min-height: 2px;
   max-height: 28px;
-  border-radius: 99px;
-  background: linear-gradient(to top, #22c55e, #4ade80);
-  flex-shrink: 0;
+  transition: height 0.06s ease-out, opacity 0.15s ease;
+  will-change: height;
 }
-
-/* Timer text */
-.voice-rec-timer {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary, #f8fafc);
-  letter-spacing: 0.5px;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Shared action button style */
-.voice-rec-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background 0.2s;
-  flex-shrink: 0;
-}
-.voice-rec-btn:active { transform: scale(0.88); }
-
-/* Delete button */
-.voice-rec-delete {
-  background: rgba(239,68,68,0.12);
-  color: #ef4444;
-}
-.voice-rec-delete:hover { background: rgba(239,68,68,0.22); }
-
-/* Pause/Resume button */
-.voice-rec-pause {
-  background: rgba(99,102,241,0.12);
-  color: #818cf8;
-}
-.voice-rec-pause:hover { background: rgba(99,102,241,0.22); }
-
-/* Send button (green, bigger) */
-.voice-rec-send {
-  width: 44px;
-  height: 44px;
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(34,197,94,0.4);
-}
-.voice-rec-send:hover {
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  box-shadow: 0 6px 20px rgba(34,197,94,0.5);
-}
-
-/* Mic button (shown when no text) */
-.chat-mic-btn {
-  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(34,197,94,0.4) !important;
-  animation: micBtnIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
-}
-.chat-send-btn-active {
-  animation: sendBtnIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
-}
-@keyframes micBtnIn  { from { transform: scale(0.7) rotate(-30deg); opacity:0; } to { transform: scale(1) rotate(0); opacity:1; } }
-@keyframes sendBtnIn { from { transform: scale(0.7) rotate(30deg);  opacity:0; } to { transform: scale(1) rotate(0); opacity:1; } }
-
-/* ═══════════════════════════════════════════ */
-/*  VOICE RECORDER BAR — WhatsApp Style       */
-/* ═══════════════════════════════════════════ */
-.voice-recorder-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: rgba(15,23,42,0.95);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255,255,255,0.06);
-  animation: voiceBarIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
-}
-@keyframes voiceBarIn {
-  from { opacity:0; transform: translateY(8px); }
-  to   { opacity:1; transform: translateY(0); }
-}
-
-.voice-rec-btn {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.15s, opacity 0.15s;
-}
-.voice-rec-btn:active { transform: scale(0.88); }
-
-.voice-rec-delete { background: rgba(239,68,68,0.15); color: #ef4444; }
-.voice-rec-delete:hover { background: rgba(239,68,68,0.25); }
-
-.voice-rec-pause { background: rgba(99,102,241,0.15); color: #818cf8; }
-.voice-rec-pause:hover { background: rgba(99,102,241,0.25); }
-
-.voice-rec-send { background: linear-gradient(135deg,#22c55e,#16a34a); color: white; box-shadow: 0 4px 12px rgba(34,197,94,0.35); }
-.voice-rec-send:hover { box-shadow: 0 6px 18px rgba(34,197,94,0.45); }
-
-/* Wave area */
-.voice-rec-wave-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(255,255,255,0.04);
-  border-radius: 20px;
-  padding: 8px 14px;
-  min-height: 40px;
-  overflow: hidden;
-}
-
-/* Pulsing red dot */
-.voice-rec-dot {
-  flex-shrink: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ef4444;
-}
-.voice-rec-dot-pulse {
-  animation: dotPulse 1s ease-in-out infinite;
-}
-@keyframes dotPulse {
-  0%,100% { opacity:1; transform:scale(1); }
-  50%      { opacity:0.4; transform:scale(0.75); }
-}
-
-/* Waveform bars */
-.voice-rec-waveform {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 24px;
-}
-.voice-rec-bar {
-  flex-shrink: 0;
-  width: 3px;
-  border-radius: 2px;
-  background: linear-gradient(to top, #22c55e, #4ade80);
-  min-height: 4px;
-}
-
-/* Timer */
 .voice-rec-timer {
   flex-shrink: 0;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #e2e8f0;
   letter-spacing: 0.5px;
-  min-width: 36px;
+  min-width: 38px;
   text-align: right;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
+.voice-rec-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  position: relative;
+  z-index: 1;
+}
+.voice-rec-btn:active { transform: scale(0.85); }
+.voice-rec-delete {
+  background: rgba(239,68,68,0.1);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.2);
+}
+.voice-rec-delete:hover {
+  background: rgba(239,68,68,0.2);
+  border-color: rgba(239,68,68,0.4);
+  box-shadow: 0 0 12px rgba(239,68,68,0.2);
+}
+.voice-rec-pause {
+  background: rgba(99,102,241,0.1);
+  color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.2);
+}
+.voice-rec-pause:hover {
+  background: rgba(99,102,241,0.2);
+  border-color: rgba(99,102,241,0.4);
+  box-shadow: 0 0 12px rgba(99,102,241,0.2);
+}
+.voice-rec-send {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(99,102,241,0.4), 0 0 0 2px rgba(99,102,241,0.15);
+  animation: sendPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+.voice-rec-send:hover {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  box-shadow: 0 6px 24px rgba(99,102,241,0.5), 0 0 0 3px rgba(99,102,241,0.2);
+  transform: scale(1.08);
+}
+@keyframes sendPop {
+  from { transform: scale(0.5) rotate(-20deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0); opacity: 1; }
+}
+.chat-send-btn-mic {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.35) !important;
+  animation: micBtnIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+.chat-send-btn-active {
+  animation: sendBtnIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes micBtnIn  { from { transform: scale(0.6) rotate(-30deg); opacity:0; } to { transform: scale(1) rotate(0); opacity:1; } }
+@keyframes sendBtnIn { from { transform: scale(0.6) rotate(30deg); opacity:0; } to { transform: scale(1) rotate(0); opacity:1; } }
+.chat-input::placeholder { color: #94a3b8; opacity: 1; }
+[data-theme="light"] .chat-input { background: rgba(255,255,255,0.7); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+.chat-input-container { background: var(--glass); backdrop-filter: blur(20px); border-top: 1px solid rgba(255,255,255,0.1); box-shadow: 0 -10px 20px rgba(0,0,0,0.05); }
+.chat-bubble-text { font-weight: 500; letter-spacing: -0.01em; }
