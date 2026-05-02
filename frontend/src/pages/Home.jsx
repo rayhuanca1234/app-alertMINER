@@ -5,7 +5,7 @@ import { useGeolocation } from '../hooks/useGeolocation'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuthStore } from '../store/authStore'
 import AlertCard from '../components/AlertCard'
-import { ShieldCheck, RefreshCw, Loader2, Wifi, Clock } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Loader2, Wifi, Clock, Navigation } from 'lucide-react'
 
 export default function Home() {
   const { alerts, settings } = useAlertStore()
@@ -50,68 +50,72 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full bg-[#050B14]">
         <div className="flex flex-col items-center gap-3">
-          <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Cargando alertas...</span>
+          <Loader2 size={32} className="animate-spin text-blue-500" />
+          <span className="text-sm text-blue-200">Sincronizando feed...</span>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="shrink-0 px-4 py-3" style={{
-        background: 'var(--bg-secondary)',
-        backdropFilter: 'blur(8px)',
-        borderBottom: '1px solid var(--border)',
+    <div className="flex flex-col h-full relative overflow-hidden bg-[#050B14]">
+      {/* ── Immersive Premium Background ── */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/10 blur-[100px] pointer-events-none" />
+
+      {/* ── Header ── */}
+      <div className="shrink-0 px-5 py-4 z-10 sticky top-0" style={{
+        background: 'rgba(5, 11, 20, 0.65)',
+        backdropFilter: 'blur(24px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
       }}>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>
-              Hola, {profile?.name || user?.email?.split('@')[0] || 'Minero'} 👋
+            <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
+              Hola, {profile?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Minero'} 
+              <span className="animate-pulse">✨</span>
             </h1>
-            <div className="flex items-center gap-2 mt-0.5">
-              <Wifi size={10} className="text-emerald-400" />
-              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                Conectado • {activeAlerts.length} alertas activas
+            <div className="flex items-center gap-2 mt-1">
+              <span className="flex items-center gap-1.5 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                <Wifi size={10} /> Online
               </span>
-              <span className="text-[9px] flex items-center gap-1 px-1.5 py-0.5 rounded-full"
-                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                <Clock size={8} /> {expiryLabel(settings.alertExpiryMinutes || 60)}
+              <span className="text-[11px] text-slate-400 font-medium">
+                {activeAlerts.length} alertas activas
               </span>
             </div>
           </div>
           <button onClick={handleRefresh} disabled={refreshing}
-            className="p-2 rounded-xl transition-all hover:opacity-80"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-            <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} style={{ color: 'var(--text-secondary)' }} />
+            className="p-3 rounded-2xl transition-all active:scale-95 bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10"
+            style={{ backdropFilter: 'blur(12px)' }}>
+            <RefreshCw size={18} className={refreshing ? 'animate-spin text-blue-400' : ''} />
           </button>
         </div>
       </div>
 
-      {/* Alerts list */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-20">
+      {/* ── Alerts Feed ── */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 relative z-10">
         {activeAlerts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full opacity-70">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
-              style={{ background: 'rgba(34, 197, 94, 0.1)' }}>
-              <ShieldCheck size={40} className="text-emerald-500" />
+          <div className="flex flex-col items-center justify-center h-full opacity-80">
+            <div className="w-24 h-24 rounded-3xl flex items-center justify-center mb-5 bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative">
+              <ShieldCheck size={48} className="text-emerald-400" />
+              <div className="absolute inset-0 rounded-3xl border border-emerald-400/50 animate-ping opacity-20" />
             </div>
-            <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Zona segura</h2>
-            <p className="text-sm text-center max-w-xs" style={{ color: 'var(--text-secondary)' }}>
-              No hay alertas activas en este momento. Mantente atento.
+            <h2 className="text-xl font-bold mb-2 text-white tracking-tight">Zona Segura</h2>
+            <p className="text-sm text-center max-w-[240px] text-slate-400 leading-relaxed">
+              No se han reportado incidencias. El radar está despejado.
             </p>
           </div>
         ) : (
-          activeAlerts.map(alert => (
-            <AlertCard 
-              key={alert.id} 
-              alert={alert} 
-              userPosition={position}
-              currentUser={user}
-            />
+          activeAlerts.map((alert, index) => (
+            <div key={alert.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'both' }}>
+              <AlertCard 
+                alert={alert} 
+                userPosition={position}
+                currentUser={user}
+              />
+            </div>
           ))
         )}
       </div>

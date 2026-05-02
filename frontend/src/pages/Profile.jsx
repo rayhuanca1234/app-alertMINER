@@ -1,42 +1,51 @@
+import './Profile.css'
 import React, { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useAlertStore } from '../store/alertStore'
-import { LogOut, User, Shield, ChevronRight, Camera, Save, X, Loader2, Bell } from 'lucide-react'
+import { 
+  LogOut, UserPlus, Menu, Lock, Mail, Play, Plus, 
+  Grid, Bookmark, Heart, MoreHorizontal, Settings, Edit2 
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import InboxPanel from '../components/InboxPanel'
 
 export default function Profile() {
   const { user, profile, updateProfile, signOut } = useAuthStore()
+  const [activeTab, setActiveTab] = useState('grid') // 'grid' | 'inbox' | 'saved'
   const [editing, setEditing] = useState(false)
+  
+  // Profile Form States
   const [name, setName] = useState(profile?.name || '')
-  const [phone, setPhone] = useState(profile?.phone || '')
+  const [bio, setBio] = useState(profile?.bio || 'Aprovecha la vida que el tiempo nos gana')
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
+  // Stats mockups based on user request (TikTok style)
+  const stats = {
+    following: '643',
+    followers: '146,6 mil',
+    likes: '566,2 mil'
+  }
+
   const handleSave = async () => {
     setSaving(true)
-    await updateProfile({ name, phone })
+    await updateProfile({ name, bio }) // ensure your backend accepts 'bio'
     setEditing(false)
     setSaving(false)
   }
 
   const initials = (profile?.name || user?.email || 'U').slice(0, 2).toUpperCase()
+  const handleStr = profile?.name ? profile.name.toLowerCase().replace(/\s+/g, '') + (user?.id?.slice(0,4) || '') : 'usuario'
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     setUploadingAvatar(true)
     const fileExt = file.name.split('.').pop()
     const filePath = `avatars/${user.id}_${Date.now()}.${fileExt}`
-
     try {
-      const { error: uploadError } = await supabase.storage
-        .from('chat-media')
-        .upload(filePath, file, { upsert: true })
-
+      const { error: uploadError } = await supabase.storage.from('chat-media').upload(filePath, file, { upsert: true })
       if (uploadError) throw uploadError
-
       const { data } = supabase.storage.from('chat-media').getPublicUrl(filePath)
       await updateProfile({ avatar_url: data.publicUrl })
     } catch (err) {
@@ -46,120 +55,132 @@ export default function Profile() {
     }
   }
 
+  // Mock grid data for visual realistic TikTok look
+  const mockGrid = [
+    { id: 1, views: '12k', img: 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=300&q=80' },
+    { id: 2, views: '3.4k', img: 'https://images.unsplash.com/photo-1542314831-c6a4d1409362?auto=format&fit=crop&w=300&q=80' },
+    { id: 3, views: '890', img: 'https://images.unsplash.com/photo-1493612276216-ee3925520721?auto=format&fit=crop&w=300&q=80' },
+    { id: 4, views: '5.1k', img: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=300&q=80' },
+    { id: 5, views: '11k', img: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=300&q=80' },
+    { id: 6, views: '2.2k', img: 'https://images.unsplash.com/photo-1511300636408-a63a89df3482?auto=format&fit=crop&w=300&q=80' },
+  ]
+
   return (
-    <div className="p-4 overflow-y-auto h-full space-y-4 pb-24">
-      {/* Profile Card */}
-      <div className="rounded-2xl p-6 relative overflow-hidden"
-        style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-1/2 translate-x-1/2"
-          style={{ background: 'var(--accent-glow)' }} />
+    <div className="profile-container animate-fadeIn">
+      {/* ── Top Header ── */}
+      <div className="profile-header">
+        <div style={{ width: 24 }} /> {/* Spacer */}
+        <h1 className="profile-username">
+          {profile?.name || 'MinerAlert'}
+          <span className="text-[10px] bg-emerald-500/20 text-emerald-500 px-1.5 rounded">PRO</span>
+        </h1>
+        <div className="profile-header-actions">
+          <Settings size={22} className="cursor-pointer" onClick={() => signOut()} />
+          <Menu size={22} className="cursor-pointer" />
+        </div>
+      </div>
 
-        <div className="flex items-center gap-4 relative z-10">
-          <div className="relative group cursor-pointer" onClick={() => document.getElementById('avatar-upload').click()}>
-            <input type="file" id="avatar-upload" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
-
-            {uploadingAvatar ? (
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-slate-800/50">
-                <Loader2 size={24} className="animate-spin text-white" />
-              </div>
-            ) : profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" className="w-16 h-16 rounded-2xl object-cover ring-2 transition-opacity group-hover:opacity-75"
-                style={{ '--tw-ring-color': 'var(--accent)' }} />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white shadow-lg transition-opacity group-hover:opacity-75"
-                style={{ background: `linear-gradient(135deg, var(--gradient-start), var(--gradient-end))` }}>
-                {initials}
-              </div>
-            )}
-
-            {!uploadingAvatar && (
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded-2xl">
-                <Camera size={20} className="text-white" />
-              </div>
-            )}
+      {/* ── Main Info: Stats & Avatar ── */}
+      <div className="profile-info-section">
+        <div className="profile-stats-avatar-row">
+          <div className="profile-stats">
+            <div className="profile-stat-item">
+              <span className="profile-stat-value">{stats.following}</span>
+              <span className="profile-stat-label">Siguiendo</span>
+            </div>
+            <div className="profile-stat-item">
+              <span className="profile-stat-value">{stats.followers}</span>
+              <span className="profile-stat-label">Seguidores</span>
+            </div>
+            <div className="profile-stat-item">
+              <span className="profile-stat-value">{stats.likes}</span>
+              <span className="profile-stat-label">Me gusta</span>
+            </div>
           </div>
-          <div className="flex-1">
-            {editing ? (
-              <input value={name} onChange={(e) => setName(e.target.value)}
-                className="rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 w-full"
-                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)', '--tw-ring-color': 'var(--accent-glow)' }} />
-            ) : (
-              <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{profile?.name || 'Sin nombre'}</h2>
-            )}
-            <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{user?.email}</p>
-            {profile?.is_verified && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold mt-1 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                <Shield size={10} /> Verificado
-              </span>
-            )}
+          
+          <div className="profile-avatar-container">
+            <input type="file" id="avatar-upload" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
+            <div className="w-full h-full relative cursor-pointer" onClick={() => document.getElementById('avatar-upload').click()}>
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="" className="profile-avatar" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="profile-avatar-placeholder">{initials}</div>
+              )}
+              <div className="profile-avatar-add"><Plus size={16} strokeWidth={3} /></div>
+            </div>
           </div>
         </div>
 
-        {editing ? (
-          <div className="mt-4 space-y-3 relative z-10">
-            <div>
-              <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>Teléfono</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)}
-                placeholder="+51 999 999 999"
-                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
-                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
+        {/* ── Bio & Handle ── */}
+        <div className="profile-bio-section">
+          {editing ? (
+            <div className="space-y-2 mt-2">
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 ring-blue-500" />
+              <input value={bio} onChange={e => setBio(e.target.value)} placeholder="Tu biografía" className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 ring-blue-500" />
+              <div className="flex gap-2">
+                <button onClick={handleSave} className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-sm font-bold">Guardar</button>
+                <button onClick={() => setEditing(false)} className="flex-1 bg-slate-800 border border-slate-700 py-1.5 rounded-lg text-sm font-bold">Cancelar</button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={handleSave} disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 text-white py-2 rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
-                style={{ background: 'var(--accent)' }}>
-                <Save size={14} />
-                {saving ? 'Guardando...' : 'Guardar'}
-              </button>
-              <button onClick={() => setEditing(false)}
-                className="px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-1"
-                style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-                <X size={14} /> Cancelar
-              </button>
-            </div>
+          ) : (
+            <>
+              <div className="profile-handle">@{handleStr}</div>
+              <div className="profile-bio">{profile?.bio || 'Aprovecha la vida que el tiempo nos gana'}</div>
+              <div className="profile-email"><Mail size={12} /> {user?.email}</div>
+              
+              <div className="profile-actions-row">
+                <button className="profile-action-btn" onClick={() => setEditing(true)}>Editar perfil</button>
+                <button className="profile-action-btn">Añadir amigos</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div className="profile-tabs">
+        <div className={`profile-tab ${activeTab === 'grid' ? 'active' : ''}`} onClick={() => setActiveTab('grid')}>
+          <Grid size={20} strokeWidth={activeTab === 'grid' ? 2.5 : 1.5} />
+        </div>
+        <div className={`profile-tab ${activeTab === 'saved' ? 'active' : ''}`} onClick={() => setActiveTab('saved')}>
+          <Lock size={20} strokeWidth={activeTab === 'saved' ? 2.5 : 1.5} />
+        </div>
+        <div className={`profile-tab ${activeTab === 'inbox' ? 'active' : ''}`} onClick={() => setActiveTab('inbox')}>
+          <Mail size={20} strokeWidth={activeTab === 'inbox' ? 2.5 : 1.5} />
+        </div>
+      </div>
+
+      {/* ── Tab Content ── */}
+      <div className="profile-content min-h-[400px]">
+        {activeTab === 'grid' && (
+          <div className="profile-grid">
+            {mockGrid.map((item) => (
+              <div key={item.id} className="profile-grid-item group">
+                <img src={item.img} alt="" className="profile-grid-img" loading="lazy" />
+                <div className="profile-grid-views">
+                  <Play size={10} fill="currentColor" /> {item.views}
+                </div>
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+              </div>
+            ))}
           </div>
-        ) : (
-          <button onClick={() => { setEditing(true); setName(profile?.name || ''); setPhone(profile?.phone || '') }}
-            className="mt-4 text-sm font-medium transition-colors relative z-10 flex items-center gap-1"
-            style={{ color: 'var(--accent)' }}>
-            Editar perfil <ChevronRight size={14} />
-          </button>
+        )}
+
+        {activeTab === 'saved' && (
+          <div className="flex flex-col items-center justify-center p-12 text-center opacity-60">
+            <Lock size={48} className="mb-4 stroke-[1]" />
+            <h3 className="font-bold text-lg mb-1">Solo tú puedes ver esto</h3>
+            <p className="text-sm">Tus alertas guardadas aparecerán aquí.</p>
+          </div>
+        )}
+
+        {activeTab === 'inbox' && (
+          <div className="h-full border-t border-[var(--border)]">
+            <InboxPanel />
+          </div>
         )}
       </div>
 
-
-
-      {/* Notifications Inbox */}
-      <div className="h-96">
-        <InboxPanel />
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl p-4 text-center" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-          <div className="text-2xl font-black" style={{ color: 'var(--accent)' }}>
-            {useAlertStore.getState().alerts.filter(a => a.is_active).length}
-          </div>
-          <div className="text-[10px] font-medium mt-1" style={{ color: 'var(--text-muted)' }}>Alertas Activas</div>
-        </div>
-        <div className="rounded-2xl p-4 text-center" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-          <div className="text-2xl font-black" style={{ color: 'var(--success, #22c55e)' }}>✓</div>
-          <div className="text-[10px] font-medium mt-1" style={{ color: 'var(--text-muted)' }}>GPS Activo</div>
-        </div>
-      </div>
-
-      {/* Logout */}
-      <button onClick={() => signOut()}
-        className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl font-bold transition-all active:scale-[0.98]"
-        style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: 'var(--danger)' }}>
-        <LogOut size={18} />
-        Cerrar Sesión
-      </button>
-
-      <p className="text-center text-[10px] pb-4" style={{ color: 'var(--text-muted)' }}>
-        MinerAlert v2.0 • Puerto Maldonado, Perú
-      </p>
     </div>
   )
 }

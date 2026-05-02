@@ -6,21 +6,19 @@ import { useAuthStore } from '../store/authStore'
 function timeAgo(date) {
   const now = new Date()
   const diff = (now - new Date(date)) / 1000
-  if (diff < 60) return 'hace segundos'
+  if (diff < 60) return 'ahora'
   if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`
   if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`
-  return `hace ${Math.floor(diff / 86400)} días`
+  return `hace ${Math.floor(diff / 86400)} d`
 }
 
 export default function AlertCard({ alert, userPosition }) {
   const navigate = useNavigate()
   const { user, profile: userProfile } = useAuthStore()
   const profile = alert.profiles
-  // Bulletproof check: either user_id matches, or names match exactly
   const isOwn = (user && alert.user_id === user.id) || (userProfile && profile && userProfile.name === profile.name)
   const initials = (profile?.name || 'A').slice(0, 2).toUpperCase()
 
-  // Calculate distance if we have user position
   let distanceKm = alert.distance_km
   if (!distanceKm && userPosition && alert.latitude && alert.longitude) {
     const R = 6371
@@ -34,97 +32,83 @@ export default function AlertCard({ alert, userPosition }) {
   const isVeryNear = distanceKm !== undefined && distanceKm < 0.5
 
   const handleClick = () => {
-    // Navigate to map and trace route to this alert
     navigate(`/map?alertId=${alert.id}&route=true`)
   }
 
+  // Determine glow and border color based on proximity and ownership
+  const cardColor = isVeryNear ? 'rgba(239, 68, 68, 0.15)' : isNear ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255, 255, 255, 0.03)'
+  const borderColor = isVeryNear ? 'rgba(239, 68, 68, 0.3)' : isNear ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.08)'
+
   return (
     <div onClick={handleClick}
-      className={`relative p-4 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${isOwn ? 'ring-1 ring-emerald-500/30' : ''}`}
+      className="relative p-5 rounded-[24px] cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] overflow-hidden"
       style={{
-        background: isOwn 
-          ? 'linear-gradient(to right, rgba(16, 185, 129, 0.08), rgba(6, 78, 59, 0.05))'
-          : isVeryNear
-            ? 'rgba(127, 29, 29, 0.3)'
-            : isNear
-              ? 'rgba(120, 53, 15, 0.15)'
-              : 'var(--bg-card)',
-        borderColor: isOwn 
-          ? 'rgba(16, 185, 129, 0.4)'
-          : isVeryNear
-            ? 'rgba(239, 68, 68, 0.6)'
-            : isNear
-              ? 'rgba(245, 158, 11, 0.4)'
-              : 'var(--border)',
-        boxShadow: isVeryNear ? '0 0 20px rgba(220,38,38,0.2)' : 'none',
+        background: cardColor,
+        border: `1px solid ${borderColor}`,
+        backdropFilter: 'blur(16px)',
+        boxShadow: isVeryNear ? '0 10px 30px rgba(220,38,38,0.1)' : '0 4px 20px rgba(0,0,0,0.2)',
       }}>
       
-      {/* Pulse animation for very near alerts */}
-      {isVeryNear && (
-        <div className="absolute inset-0 rounded-2xl border-2 border-red-500 animate-ping opacity-20" />
-      )}
+      {/* Glossy top highlight */}
+      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
       <div className="flex justify-between items-start relative z-10">
-        <div className="flex items-center gap-3">
+        <div className="flex gap-3">
           {/* Avatar */}
           {profile?.avatar_url ? (
-            <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" className="w-11 h-11 rounded-full object-cover ring-2 ring-red-500/50" />
+            <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" className="w-12 h-12 rounded-2xl object-cover ring-2 ring-white/10 shadow-lg" />
           ) : (
-            <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-lg"
-              style={{ background: 'linear-gradient(135deg, var(--danger), #f59e0b)' }}>
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-lg"
+              style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
               {initials}
             </div>
           )}
 
-          <div>
+          <div className="flex flex-col justify-center">
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-sm" style={{ color: isOwn ? '#34d399' : 'var(--text-primary)' }}>
-                {isOwn ? 'Tú (Tu alerta)' : profile?.name || 'Minero Anónimo'}
+              <h3 className="font-bold text-[15px] text-white tracking-tight">
+                {isOwn ? 'Tú' : profile?.name?.split(' ')[0] || 'Minero'}
               </h3>
               {isOwn && (
-                <span className="bg-emerald-500/20 text-emerald-400 text-[9px] px-1.5 py-0.5 rounded border border-emerald-500/30">
-                  Creador
+                <span className="bg-blue-500/20 text-blue-400 text-[9px] px-1.5 py-0.5 rounded uppercase font-black tracking-wider">
+                  Mía
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <Clock size={12} style={{ color: 'var(--text-muted)' }} />
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{timeAgo(alert.created_at)}</span>
+            <div className="flex items-center gap-1.5 mt-0.5 text-slate-400">
+              <Clock size={11} />
+              <span className="text-[11px] font-medium">{timeAgo(alert.created_at)}</span>
             </div>
           </div>
         </div>
 
-        {/* Distance badge */}
-        <div className="flex flex-col items-end gap-1">
-          {isVeryNear ? (
-            <span className="bg-red-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full animate-pulse shadow-lg shadow-red-500/50">
-              ⚠️ ¡MUY CERCA!
-            </span>
-          ) : isNear ? (
-            <span className="bg-amber-500 text-black text-[10px] font-bold px-2.5 py-1 rounded-full">
-              ¡CERCA!
-            </span>
-          ) : null}
-          
-          {distanceKm !== undefined && (
-            <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+        {/* Distance Indicator */}
+        {distanceKm !== undefined && (
+          <div className="flex flex-col items-end">
+            <div className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ${
+              isVeryNear ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 
+              isNear ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 
+              'bg-white/5 text-slate-300 border border-white/10'
+            }`}>
               <MapPin size={10} />
-              <span>{distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`}</span>
+              {distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {alert.description && (
-        <p className="mt-3 text-sm leading-relaxed pl-14" style={{ color: 'var(--text-secondary)' }}>
+        <p className="mt-4 text-[14px] leading-relaxed text-slate-300 pl-[60px] font-medium">
           {alert.description}
         </p>
       )}
 
-      {/* Navigate indicator */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-1">
-        <Navigation size={12} style={{ color: 'var(--accent)' }} />
-        <span className="text-[9px] font-medium" style={{ color: 'var(--accent)' }}>Ver ruta</span>
+      {/* Futuristic Route Button */}
+      <div className="mt-4 flex justify-end">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[11px] font-bold tracking-wide uppercase transition-colors hover:bg-blue-600/30">
+          <Navigation size={12} className="fill-blue-500" />
+          Ver ruta
+        </div>
       </div>
     </div>
   )
