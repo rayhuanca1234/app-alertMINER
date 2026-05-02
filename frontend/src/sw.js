@@ -4,6 +4,8 @@ import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
+// ─── Cache buster: v5 ─────────────────────────────────────────────────────────
+
 // ─── Push event: show native OS notification ──────────────────────────────────
 self.addEventListener('push', (event) => {
   if (!event.data) return
@@ -12,8 +14,6 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data.json()
   } catch {
-    // MinerAlert Service Worker
-    // Cache buster: v3
     data = { title: '⚠️ MinerAlert', body: event.data.text() }
   }
 
@@ -22,21 +22,14 @@ self.addEventListener('push', (event) => {
   const isChat = type === 'chat' || messageId;
 
   const options = {
-    body: body || (isChat ? 'Nuevo mensaje' : 'Se ha reportado una nueva amenaza de seguridad'),
+    body: body || (isChat ? 'Nuevo mensaje — toca para responder' : 'Nueva amenaza de seguridad — toca para ver en mapa'),
     icon: icon || '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
     vibrate: [500, 200, 500, 200, 500],
     requireInteraction: !isChat,
-    tag: isChat ? `chat-${channelId || Date.now()}` : `alert-${alertId || Date.now()}`,   // evita notificaciones duplicadas
+    tag: isChat ? `chat-${channelId || Date.now()}` : `alert-${alertId || Date.now()}`,
     renotify: true,
-    data: { alertId, lat, lng, desc, messageId, channelId, type: isChat ? 'chat' : 'alert' },        // payload para el click handler
-    actions: isChat ? [
-      { action: 'chat',    title: '💬 Responder' },
-      { action: 'close',  title: '✕ Cerrar'       },
-    ] : [
-      { action: 'map',    title: '🗺️ Ver en Mapa' },
-      { action: 'close',  title: '✕ Cerrar'       },
-    ],
+    data: { alertId, lat, lng, desc, messageId, channelId, type: isChat ? 'chat' : 'alert' },
   }
 
   event.waitUntil(
@@ -44,6 +37,7 @@ self.addEventListener('push', (event) => {
   )
 })
 
+// ─── Lifecycle: activate new SW immediately ───────────────────────────────────
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
@@ -58,63 +52,31 @@ self.addEventListener('message', (event) => {
   }
 })
 
-// ─── Notification click: open app and navigate to map with route ──────────────
+// ─── Notification click: open app and navigate ────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  // "close" action: just dismiss
-  if (event.action === 'close') return
-
   const { alertId, lat, lng, desc, messageId, type } = event.notification.data || {}
 
-  // Build URL: if we have coords → route mode; else just open the map
-  let targetUrl = '/'
-  
-  if (event.action === 'chat' || type === 'chat' || messageId) {
-    targetUrl = '/chat'
-  } else if (event.action === 'map' || (lat && lng)) {
+  // Build the target path
+  let targetPath = '/'
+
+  if (type === 'chat' || messageId) {
+    targetPath = '/chat'
+  } else if (lat && lng) {
     const encodedDesc = encodeURIComponent(desc || 'Alerta')
-    targetUrl = `/map?alertId=${alertId || ''}&lat=${lat || ''}&lng=${lng || ''}&route=true&desc=${encodedDesc}`
+    targetPath = `/map?alertId=${alertId || ''}&lat=${lat}&lng=${lng}&route=true&desc=${encodedDesc}`
   } else if (alertId) {
-    targetUrl = `/map?alertId=${alertId}&route=true`
+    targetPath = `/map?alertId=${alertId}&route=true`
   }
 
-  const fullUrl = new URL(targetUrl, self.location.origin).href
+  const fullUrl = new URL(targetPath, self.location.origin).href
 
+  // Always use openWindow — most reliable method across all platforms and states
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If it's an action button click, Android often blocks background focus(). 
-      // We must use openWindow to force the OS to bring the PWA to the foreground.
-      if (event.action && clients.openWindow) {
-        return clients.openWindow(fullUrl);
-      }
-
-      // Check if there is already a window/tab open with the exact target URL
-      for (let i = 0; i < windowClients.length; i++) {
-        let client = windowClients[i];
-        if (client.url === fullUrl && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      
-      // If there is a window open, navigate it and focus
-      if (windowClients.length > 0) {
-        let client = windowClients[0];
-        for (const c of windowClients) {
-          if (c.focused) client = c;
-        }
-        if ('navigate' in client && 'focus' in client) {
-          return client.navigate(fullUrl).then(c => c ? c.focus() : client.focus());
-        }
-      }
-      
-      // Otherwise open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(fullUrl)
-      }
-    })
+    clients.openWindow(fullUrl)
   )
 })
 
-// ─── Background sync / fetch (optional passthrough) ──────────────────────────
+// ─── Fetch passthrough ───────────────────────────────────────────────────────
 self.addEventListener('fetch', () => {})
