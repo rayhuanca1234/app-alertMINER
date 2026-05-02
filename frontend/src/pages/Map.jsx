@@ -229,7 +229,9 @@ export default function MapView() {
       const parsedLat = parseFloat(routeLat)
       const parsedLng = parseFloat(routeLng)
 
-      if (routeLat && routeLat !== 'undefined' && routeLng && routeLng !== 'undefined' && position && !isNaN(parsedLat) && !isNaN(parsedLng)) {
+      // Solo procesar la ruta cuando tengamos una ubicación REAL (accuracy > 0)
+      // Si es 0, significa que es la ubicación fallback temporal, así que esperamos.
+      if (routeLat && routeLat !== 'undefined' && routeLng && routeLng !== 'undefined' && position && position.accuracy > 0 && !isNaN(parsedLat) && !isNaN(parsedLng)) {
         // Use coordinates directly from URL (from Push Notification or Chat)
         const dummyAlert = {
           id: alertId || 'shared-location',
@@ -245,7 +247,7 @@ export default function MapView() {
         ))
         setFollowUser(false)
         setSearchParams({}, { replace: true })
-      } else if (alertId && position) {
+      } else if (alertId && position && position.accuracy > 0) {
         // Fallback: wait for alerts array to load and find it by ID
         const alert = alerts.find(a => a.id === alertId)
         if (alert) {
