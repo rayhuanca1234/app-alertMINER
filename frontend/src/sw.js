@@ -83,18 +83,25 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If the app is already open in some tab/window, focus and send a message to navigate
-      if (windowClients.length > 0) {
-        let client = windowClients[0]
-        for (const c of windowClients) {
-          if (c.focused) client = c
+      // Check if there is already a window/tab open with the target URL
+      for (let i = 0; i < windowClients.length; i++) {
+        let client = windowClients[i];
+        if (client.url === fullUrl && 'focus' in client) {
+          return client.focus();
         }
-        client.postMessage({ type: 'NAVIGATE', url: targetUrl })
-        if ('focus' in client) {
-          return client.focus()
-        }
-        return
       }
+      
+      // If there is a window open, navigate it and focus
+      if (windowClients.length > 0) {
+        let client = windowClients[0];
+        for (const c of windowClients) {
+          if (c.focused) client = c;
+        }
+        if ('navigate' in client && 'focus' in client) {
+          return client.navigate(fullUrl).then(c => c ? c.focus() : client.focus());
+        }
+      }
+      
       // Otherwise open a new window
       if (clients.openWindow) {
         return clients.openWindow(fullUrl)
