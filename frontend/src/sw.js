@@ -44,6 +44,20 @@ self.addEventListener('push', (event) => {
   )
 })
 
+self.addEventListener('install', () => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim())
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
+
 // ─── Notification click: open app and navigate to map with route ──────────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
@@ -70,12 +84,16 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       // If the app is already open in some tab/window, focus and send a message to navigate
-      for (const client of windowClients) {
-        if ('focus' in client) {
-          client.focus()
-          client.postMessage({ type: 'NAVIGATE', url: targetUrl })
-          return
+      if (windowClients.length > 0) {
+        let client = windowClients[0]
+        for (const c of windowClients) {
+          if (c.focused) client = c
         }
+        client.postMessage({ type: 'NAVIGATE', url: targetUrl })
+        if ('focus' in client) {
+          return client.focus()
+        }
+        return
       }
       // Otherwise open a new window
       if (clients.openWindow) {
