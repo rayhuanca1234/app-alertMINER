@@ -799,40 +799,124 @@
   font-size: 1.5rem;
   font-weight: bold;
 }
-.chat-file-container {
+/* ── Premium File Card (WhatsApp-style) ── */
+.chat-file-card {
+  width: 280px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(15,23,42,0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+}
+.chat-file-card:hover {
+  border-color: rgba(99,102,241,0.25);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.3);
+}
+
+/* Body row: icon + info */
+.chat-file-card-body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
+  padding: 14px 14px 12px;
+}
+.chat-file-card-icon {
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
-  width: 260px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.chat-file-container:hover {
-  background: var(--bg-hover);
-}
-.chat-file-icon {
-  background: rgba(59, 130, 246, 0.1);
-  padding: 10px;
-  border-radius: 8px;
-}
-.chat-file-info {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.chat-file-card:hover .chat-file-card-icon {
+  transform: scale(1.08);
+}
+.chat-file-card-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.chat-file-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
+.chat-file-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
+.chat-file-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-file-card-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.chat-file-card-size {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+  font-weight: 500;
+}
+
+/* Action buttons row */
+.chat-file-card-actions {
+  display: flex;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.chat-file-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary, #818cf8);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.02em;
+}
+.chat-file-action-btn:hover {
+  background: rgba(99,102,241,0.08);
+  color: #a5b4fc;
+}
+.chat-file-action-btn:active {
+  transform: scale(0.95);
+}
+.chat-file-action-divider {
+  width: 1px;
+  background: rgba(255,255,255,0.06);
+  align-self: stretch;
+}
+
+/* Light theme overrides */
+[data-theme="light"] .chat-file-card {
+  background: rgba(255,255,255,0.8);
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+[data-theme="light"] .chat-file-card-actions {
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+[data-theme="light"] .chat-file-action-divider {
+  background: rgba(0,0,0,0.06);
+}
+
 
 
 /* Mobile UX fixes for Chat Action Header */

@@ -6,7 +6,8 @@ import {
   Sparkles, Shield, Zap, Volume2, VolumeX, Search,
   MoreVertical, Phone, Pin, AtSign, Bell, Star,
   ChevronRight, Radio, MessageSquare, Trash2, Share2, CheckSquare, Clock,
-  Camera, Copy, Forward, MapPin, Pause
+  Camera, Copy, Forward, MapPin, Pause, FileText, Download, ExternalLink,
+  FileSpreadsheet, File, FileArchive
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -500,25 +501,83 @@ function ChatBubble({ message, isOwn, index, selectionMode, isSelected, toggleSe
             </div>
           )}
 
-          {message.type === 'FILE' && message.file_metadata && (
-            <div className="chat-file-container" onClick={(e) => {
-              if (selectionMode) { e.preventDefault(); e.stopPropagation(); toggleSelection(message.id); }
-              else { window.open(message.media_url, '_blank'); }
-            }}>
-              <div className="chat-file-icon">
-                <Paperclip size={24} className="text-blue-500" />
+          {message.type === 'FILE' && message.file_metadata && (() => {
+            const fname = message.file_metadata.name || 'documento'
+            const ext = fname.split('.').pop()?.toLowerCase() || ''
+            const sizeBytes = message.file_metadata.size || 0
+            const sizeLabel = sizeBytes > 1048576 ? `${(sizeBytes / 1048576).toFixed(1)} MB` : sizeBytes > 1024 ? `${(sizeBytes / 1024).toFixed(0)} KB` : sizeBytes > 0 ? `${sizeBytes} B` : 'Documento'
+
+            // File type config: icon, color, label
+            const fileTypes = {
+              pdf:  { icon: FileText, color: '#ef4444', bg: 'rgba(239,68,68,0.12)', label: 'PDF' },
+              doc:  { icon: FileText, color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'DOC' },
+              docx: { icon: FileText, color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'DOCX' },
+              xls:  { icon: FileSpreadsheet, color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'XLS' },
+              xlsx: { icon: FileSpreadsheet, color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'XLSX' },
+              csv:  { icon: FileSpreadsheet, color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'CSV' },
+              txt:  { icon: FileText, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', label: 'TXT' },
+              zip:  { icon: FileArchive, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'ZIP' },
+              rar:  { icon: FileArchive, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'RAR' },
+            }
+            const ft = fileTypes[ext] || { icon: File, color: '#6366f1', bg: 'rgba(99,102,241,0.12)', label: ext.toUpperCase() || 'ARCHIVO' }
+            const IconComp = ft.icon
+
+            const handleOpen = (e) => {
+              e.stopPropagation()
+              if (!selectionMode) window.open(message.media_url, '_blank')
+            }
+
+            const handleSave = async (e) => {
+              e.stopPropagation()
+              if (selectionMode) return
+              try {
+                const res = await fetch(message.media_url)
+                const blob = await res.blob()
+                const blobUrl = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = blobUrl
+                a.download = fname
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+                URL.revokeObjectURL(blobUrl)
+              } catch {
+                window.open(message.media_url, '_blank')
+              }
+            }
+
+            return (
+              <div className="chat-file-card" onClick={(e) => {
+                if (selectionMode) { e.preventDefault(); e.stopPropagation(); toggleSelection(message.id); }
+              }}>
+                {/* File info row */}
+                <div className="chat-file-card-body">
+                  <div className="chat-file-card-icon" style={{ background: ft.bg }}>
+                    <IconComp size={22} style={{ color: ft.color }} />
+                  </div>
+                  <div className="chat-file-card-info">
+                    <span className="chat-file-card-name">{fname}</span>
+                    <div className="chat-file-card-meta">
+                      <span className="chat-file-card-badge" style={{ background: ft.bg, color: ft.color }}>{ft.label}</span>
+                      <span className="chat-file-card-size">{sizeLabel}</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Action buttons */}
+                <div className="chat-file-card-actions">
+                  <button className="chat-file-action-btn" onClick={handleOpen}>
+                    <ExternalLink size={14} />
+                    <span>Abrir</span>
+                  </button>
+                  <div className="chat-file-action-divider" />
+                  <button className="chat-file-action-btn" onClick={handleSave}>
+                    <Download size={14} />
+                    <span>Guardar</span>
+                  </button>
+                </div>
               </div>
-              <div className="chat-file-info">
-                <span className="chat-file-name line-clamp-1">{message.file_metadata.name}</span>
-                <span className="chat-file-size text-xs opacity-70">
-                  {message.file_metadata.size ? (message.file_metadata.size / 1024 / 1024).toFixed(2) + ' MB' : 'Documento'}
-                </span>
-              </div>
-              <div className="chat-file-download ml-auto bg-blue-500/20 p-2 rounded-full">
-                <ArrowDown size={16} className="text-blue-400" />
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {message.type === 'IMAGE' && message.media_url && (
             <div className="chat-media-container" onClick={(e) => { 
