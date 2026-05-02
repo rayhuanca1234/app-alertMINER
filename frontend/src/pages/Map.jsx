@@ -133,6 +133,16 @@ function DistanceLabel({ from, to }) {
 function RouteInfoCard({ alert, distance, onClose, etaSpeedKmh = 30 }) {
   const etaMinutes = Math.round((distance / etaSpeedKmh) * 60) // Uses dynamic speed
   
+  const getRelativeTime = (dateStr) => {
+    if (!dateStr) return '';
+    const diffMin = Math.floor((new Date() - new Date(dateStr)) / 60000);
+    if (diffMin < 1) return 'Instante';
+    if (diffMin < 60) return `Hace ${diffMin}m`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `Hace ${diffHr}h`;
+    return new Date(dateStr).toLocaleDateString();
+  };
+
   return (
     <div className="absolute bottom-20 left-4 right-4 z-[1000] animate-slideUp">
       <div className="rounded-2xl p-4 shadow-2xl"
@@ -170,9 +180,9 @@ function RouteInfoCard({ alert, distance, onClose, etaSpeedKmh = 30 }) {
           </div>
           <div className="flex-1 text-center p-2 rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
             <div className="text-lg font-black" style={{ color: 'var(--danger)' }}>
-              {new Date(alert?.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+              {getRelativeTime(alert?.created_at)}
             </div>
-            <div className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>Hora alerta</div>
+            <div className="text-[9px] font-medium" style={{ color: 'var(--text-muted)' }}>Lanzado</div>
           </div>
         </div>
       </div>

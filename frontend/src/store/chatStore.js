@@ -1,6 +1,24 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 
+const triggerChatPush = async (messageData) => {
+  try {
+    const payload = {
+      ...messageData,
+      sender_name: messageData.profiles?.name || 'Alguien',
+      avatar_url: messageData.profiles?.avatar_url
+    };
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+    await fetch(`${backendUrl}/api/push/broadcast-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: payload })
+    });
+  } catch (e) {
+    console.error('Error triggering chat push:', e);
+  }
+};
+
 const DEFAULT_CHANNEL_ID = '00000000-0000-0000-0000-000000000001'
 
 export const useChatStore = create((set, get) => ({
@@ -172,6 +190,7 @@ export const useChatStore = create((set, get) => ({
           }
         })
       }
+      triggerChatPush(data)
     }
     return { error: null }
   },
@@ -260,6 +279,7 @@ export const useChatStore = create((set, get) => ({
           }
         })
       }
+      triggerChatPush({ ...data, content: contentLabel })
     }
     return { error: null }
   },
@@ -333,6 +353,7 @@ export const useChatStore = create((set, get) => ({
     if (channel) {
       channel.send({ type: 'broadcast', event: 'new_message', payload: data })
     }
+    triggerChatPush(data)
     return { error: null }
   },
 
@@ -392,6 +413,7 @@ export const useChatStore = create((set, get) => ({
     if (channel) {
       channel.send({ type: 'broadcast', event: 'new_message', payload: data })
     }
+    triggerChatPush(data)
     return { error: null }
   },
 
@@ -440,6 +462,7 @@ export const useChatStore = create((set, get) => ({
           }
         })
       }
+      triggerChatPush({ ...data, content: insertData.content })
     }
     return { error: null }
   },
@@ -488,6 +511,7 @@ export const useChatStore = create((set, get) => ({
           }
         })
       }
+      triggerChatPush({ ...data, content: message.type === 'TEXT' ? message.content : 'Multimedia (Reenviado)' })
     }
     return { error: null }
   },

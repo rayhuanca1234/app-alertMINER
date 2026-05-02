@@ -6,7 +6,7 @@ import {
   Sparkles, Shield, Zap, Volume2, VolumeX, Search,
   MoreVertical, Phone, Pin, AtSign, Bell, Star,
   ChevronRight, Radio, MessageSquare, Trash2, Share2, CheckSquare, Clock,
-  Camera, Copy, Forward, MapPin
+  Camera, Copy, Forward, MapPin, Pause
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -58,6 +58,174 @@ function EmojiPicker({ onSelect, onClose }) {
         ))}
       </div>
     </div>
+  )
+}
+
+/* ───────────────────────────────────────────── */
+/*  VOICE RECORDER BAR (WhatsApp-style)          */
+/* ───────────────────────────────────────────── */
+function VoiceRecorderBar({
+  onUpload, onSendLocation, onSendFile, onOpenCamera, onOpenEditor,
+  text, setText, sending, handleSend, inputRef,
+  activeChannelData, showEmoji, setShowEmoji, handleEmojiSelect
+}) {
+  const [isRecording, setIsRecording] = useState(false)
+  const [isPaused, setIsPaused]       = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [wavePhase, setWavePhase]     = useState(0)
+  const mediaRecorderRef = useRef(null)
+  const chunksRef        = useRef([])
+  const timerRef         = useRef(null)
+  const streamRef        = useRef(null)
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+      const mr = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = mr
+      chunksRef.current = []
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      mr.start()
+      setIsRecording(true)
+      setIsPaused(false)
+      setRecordingTime(0)
+      timerRef.current = setInterval(() => {
+        setRecordingTime(t => t + 1)
+        setWavePhase(p => p + 1)
+      }, 1000)
+    } catch {
+      alert('No se pudo acceder al micrófono.')
+    }
+  }
+
+  const pauseRecording = () => {
+    if (!mediaRecorderRef.current) return
+    if (isPaused) {
+      mediaRecorderRef.current.resume()
+      timerRef.current = setInterval(() => {
+        setRecordingTime(t => t + 1)
+        setWavePhase(p => p + 1)
+      }, 1000)
+      setIsPaused(false)
+    } else {
+      mediaRecorderRef.current.pause()
+      clearInterval(timerRef.current)
+      setIsPaused(true)
+    }
+  }
+
+  const cancelRecording = () => {
+    clearInterval(timerRef.current)
+    if (mediaRecorderRef.current?.state !== 'inactive') mediaRecorderRef.current.stop()
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    chunksRef.current = []
+    setIsRecording(false)
+    setIsPaused(false)
+    setRecordingTime(0)
+    mediaRecorderRef.current = null
+  }
+
+  const sendRecording = () => {
+    if (!mediaRecorderRef.current) return
+    clearInterval(timerRef.current)
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+    mediaRecorderRef.current.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: mimeType })
+      const file = new File([blob], `audio_${Date.now()}.webm`, { type: mimeType })
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      setIsRecording(false)
+      setIsPaused(false)
+      setRecordingTime(0)
+      mediaRecorderRef.current = null
+      onUpload(file, 'AUDIO')
+    }
+    if (mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop()
+  }
+
+  const hasText = text.trim().length > 0
+
+  // ── Recording bar UI ──
+  if (isRecording) {
+    return (
+      <div className="voice-recorder-bar">
+        <button type="button" className="voice-rec-btn voice-rec-delete" onClick={cancelRecording} title="Cancelar">
+          <Trash2 size={20} />
+        </button>
+        <div className="voice-rec-wave-area">
+          <div className={`voice-rec-dot ${isPaused ? '' : 'voice-rec-dot-pulse'}`} />
+          <div className="voice-rec-waveform">
+            {Array.from({ length: 22 }, (_, i) => (
+              <div key={i} className="voice-rec-bar"
+                style={{
+                  height: `${isPaused ? 6 : Math.max(4, Math.abs(Math.sin((wavePhase + i) * 0.6) * 20) + 4)}px`,
+                  opacity: isPaused ? 0.4 : 1,
+                  transition: 'height 0.3s ease'
+                }}
+              />
+            ))}
+          </div>
+          <span className="voice-rec-timer">{fmt(recordingTime)}</span>
+        </div>
+        <button type="button" className="voice-rec-btn voice-rec-pause" onClick={pauseRecording} title={isPaused ? 'Reanudar' : 'Pausar'}>
+          {isPaused ? <Mic size={18} /> : <Pause size={18} />}
+        </button>
+        <button type="button" className="voice-rec-btn voice-rec-send" onClick={sendRecording} title="Enviar audio">
+          <Send size={20} />
+        </button>
+      </div>
+    )
+  }
+
+  // ── Normal input bar UI ──
+  return (
+    <form onSubmit={handleSend} className="chat-input-form relative z-20">
+      <ChatMediaUpload
+        onUpload={onUpload}
+        onSendLocation={onSendLocation}
+        onSendFile={onSendFile}
+        disabled={sending}
+        onOpenCamera={onOpenCamera}
+        onOpenEditor={onOpenEditor}
+        onRecordingChange={startRecording}
+      />
+      <div className="chat-input-wrapper">
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={`Mensaje en #${activeChannelData?.name || 'general'}`}
+          disabled={sending}
+          className="chat-input"
+          autoComplete="off"
+        />
+        <div className="chat-input-actions">
+          <div className="chat-emoji-wrapper">
+            <button type="button" onClick={() => setShowEmoji(!showEmoji)} className="chat-action-btn chat-action-btn-sm"><Smile size={18} /></button>
+            {showEmoji && <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmoji(false)} />}
+          </div>
+        </div>
+      </div>
+      {hasText ? (
+        <button type="submit" disabled={sending} className="chat-send-btn chat-send-btn-active">
+          {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={startRecording}
+          disabled={sending}
+          className="chat-send-btn chat-send-btn-mic"
+          title="Grabar audio"
+        >
+          <Mic size={20} />
+        </button>
+      )}
+    </form>
   )
 }
 
@@ -1205,25 +1373,22 @@ export default function Chat() {
               <button onClick={() => setReplyToMsg(null)} className="p-1 rounded-full hover:bg-slate-700"><X size={16} /></button>
             </div>
           )}
-          <form onSubmit={handleSend} className="chat-input-form relative z-20">
-            <ChatMediaUpload onUpload={handleMediaUpload} onSendLocation={handleLocationSend} onSendFile={handleFileSend} disabled={sending}
-              onOpenCamera={() => setShowCamera(true)}
-              onOpenEditor={(files) => setEditorFiles(files)} />
-            <div className="chat-input-wrapper">
-              <input ref={inputRef} type="text" value={text} onChange={(e) => setText(e.target.value)}
-                placeholder={`Mensaje en #${activeChannelData?.name || 'general'}`}
-                disabled={sending} className="chat-input" autoComplete="off" />
-              <div className="chat-input-actions">
-                <div className="chat-emoji-wrapper">
-                  <button type="button" onClick={() => setShowEmoji(!showEmoji)} className="chat-action-btn chat-action-btn-sm"><Smile size={18} /></button>
-                  {showEmoji && <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmoji(false)} />}
-                </div>
-              </div>
-            </div>
-            <button type="submit" disabled={!text.trim() || sending} className="chat-send-btn">
-              {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-            </button>
-          </form>
+          <VoiceRecorderBar
+            onUpload={handleMediaUpload}
+            onSendLocation={handleLocationSend}
+            onSendFile={handleFileSend}
+            onOpenCamera={() => setShowCamera(true)}
+            onOpenEditor={(files) => setEditorFiles(files)}
+            text={text}
+            setText={setText}
+            sending={sending}
+            handleSend={handleSend}
+            inputRef={inputRef}
+            activeChannelData={activeChannelData}
+            showEmoji={showEmoji}
+            setShowEmoji={setShowEmoji}
+            handleEmojiSelect={handleEmojiSelect}
+          />
         </div>
       )}
       {/* Media Viewer Overlay */}

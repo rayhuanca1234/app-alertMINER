@@ -87,4 +87,78 @@ module.exports = async function (fastify, opts) {
       return reply.code(500).send({ error: 'Internal server error.' });
     }
   });
+
+  fastify.post('/broadcast-chat', async (request, reply) => {
+    const { message } = request.body;
+
+    if (!message || !message.id) {
+      return reply.code(400).send({ error: 'Falta la información del mensaje.' });
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return reply.code(500).send({ error: 'Supabase admin keys not configured.' });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    try {
+      // Buscar suscripciones excepto la del usuario que envió el mensaje
+      const { data: subscriptions, error } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .neq('user_id', message.user_id || '00000000-0000-0000-0000-000000000000');
+
+      if (error) {
+        fastify.log.error('Error fetching subscriptions:', error);
+        return reply.code(500).send({ error: 'Failed to fetch subscriptions.' });
+      }
+
+      if (!subscriptions || subscriptions.length === 0) {
+        return { success: true, message: 'No devices to notify.' };
+      }
+
+      const pushPayload = JSON.stringify({
+        title: `💬 ${message.sender_name || 'Alguien'}`,
+        body: message.content || 'Nuevo mensaje',
+        messageId: message.id,
+        channelId: message.channel_id,
+        icon: message.avatar_url || '/pwa-192x192.png',
+        type: 'chat'
+      });
+
+      let sentCount = 0;
+      let expiredCount = 0;
+
+      const pushPromises = subscriptions.map(async (sub) => {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth
+          }
+        };
+
+        try {
+          await webpush.sendNotification(pushSubscription, pushPayload);
+          sentCount++;
+        } catch (err) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            expiredCount++;
+            await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+          } else {
+            fastify.log.error(`Error sending push to ${sub.id}:`, err);
+          }
+        }
+      });
+
+      await Promise.all(pushPromises);
+      
+      fastify.log.info(`Chat push notifications sent: ${sentCount}. Expired removed: ${expiredCount}`);
+      return { success: true, sent: sentCount, removed: expiredCount };
+
+    } catch (err) {
+      fastify.log.error('Unhandled error in /broadcast-chat:', err);
+      return reply.code(500).send({ error: 'Internal server error.' });
+    }
+  });
 };

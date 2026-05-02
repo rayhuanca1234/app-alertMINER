@@ -50,30 +50,23 @@ export default function BottomNav() {
 
           if (item.isAlert) {
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className="flex flex-col items-center transition-all duration-300"
-                style={{ marginTop: inputFocused ? '0' : '-24px' }}
-              >
-                {inputFocused ? (
-                  /* ── Compact pill when keyboard is open ── */
-                  <div className="relative flex items-center gap-1 bg-gradient-to-r from-red-600 to-red-700 px-3 py-1.5 rounded-full shadow-lg transition-all duration-300">
-                    <AlertTriangle size={14} className="text-white" />
-                    <span className="text-[10px] text-white font-black tracking-wider">ALERTA</span>
-                  </div>
-                ) : (
-                  /* ── Full floating button ── */
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-red-600 rounded-full blur-lg opacity-50 animate-pulse" />
-                    <div className="relative bg-gradient-to-br from-red-500 to-red-700 p-4 rounded-full border-4 shadow-[0_0_20px_rgba(220,38,38,0.4)] hover:from-red-400 hover:to-red-600 active:scale-90 transition-all"
-                      style={{ borderColor: 'var(--bg-primary)' }}>
-                      <AlertTriangle size={28} className="text-white" />
+              <NavLink key={item.to} to={item.to}
+                className={({isActive}) => `flex flex-col items-center py-2 px-3 rounded-xl transition-all duration-300 transform ${isActive ? 'scale-110' : 'hover:scale-105'}`}
+                style={({isActive}) => ({
+                  color: isActive ? '#ef4444' : 'var(--text-muted)',
+                })}>
+                {({isActive}) => (
+                  <>
+                    <div className="relative">
+                      <Icon size={22} strokeWidth={isActive ? 2.5 : 1.5} className="transition-transform duration-300" />
                     </div>
-                  </div>
-                )}
-                {!inputFocused && (
-                  <span className="text-[9px] mt-1 text-red-400 font-black tracking-wider">ALERTA</span>
+                    <span className={`text-[9px] mt-0.5 font-medium transition-all duration-300 ${isActive ? 'font-bold' : ''}`}>
+                      {item.label}
+                    </span>
+                    {isActive && (
+                      <div className="w-1 h-1 rounded-full mt-0.5 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse" />
+                    )}
+                  </>
                 )}
               </NavLink>
             )
@@ -81,22 +74,26 @@ export default function BottomNav() {
 
           return (
             <NavLink key={item.to} to={item.to}
-              className={({isActive}) => `flex flex-col items-center py-2 px-3 rounded-xl transition-all duration-200`}
+              className={({isActive}) => `flex flex-col items-center py-2 px-3 rounded-xl transition-all duration-300 transform ${isActive ? 'scale-110' : 'hover:scale-105'}`}
               style={({isActive}) => ({
                 color: isActive ? 'var(--accent)' : 'var(--text-muted)',
               })}>
               {({isActive}) => (
                 <>
                   <div className="relative">
-                    <Icon size={22} strokeWidth={isActive ? 2.5 : 1.5} />
+                    <Icon size={22} strokeWidth={isActive ? 2.5 : 1.5} className="transition-transform duration-300" />
                     {item.to === '/' && activeCount > 0 && (
                       <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[8px] font-bold min-w-[16px] h-4 flex items-center justify-center px-1 rounded-full shadow-lg shadow-red-500/50 animate-pulse">
                         {activeCount > 99 ? '99+' : activeCount}
                       </span>
                     )}
                   </div>
-                  <span className={`text-[9px] mt-0.5 font-medium ${isActive ? 'font-bold' : ''}`}>{item.label}</span>
-                  {isActive && <div className="w-1 h-1 rounded-full mt-0.5" style={{ background: 'var(--accent)' }} />}
+                  <span className={`text-[9px] mt-0.5 font-medium transition-all duration-300 ${isActive ? 'font-bold' : ''}`}>
+                    {item.label}
+                  </span>
+                  {isActive && (
+                    <div className="w-1 h-1 rounded-full mt-0.5 shadow-[0_0_8px_rgba(59,130,246,0.8)] animate-pulse" style={{ background: 'var(--accent)' }} />
+                  )}
                 </>
               )}
             </NavLink>
