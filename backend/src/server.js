@@ -47,7 +47,6 @@ async function start() {
       await fastify.register(require('@fastify/static'), {
         root: publicDir,
         prefix: '/',
-        decorateReply: false,
       });
 
       // SPA fallback — React Router handles all non-API routes
@@ -55,7 +54,7 @@ async function start() {
         if (request.url.startsWith('/api/') || request.url.startsWith('/socket.io/')) {
           reply.status(404).send({ error: 'Not found' });
         } else {
-          reply.sendFile('index.html', publicDir);
+          reply.sendFile('index.html');
         }
       });
     }
