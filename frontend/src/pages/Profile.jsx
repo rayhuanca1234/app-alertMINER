@@ -1,17 +1,17 @@
 import './Profile.css'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useAlertStore } from '../store/alertStore'
 import { 
   LogOut, UserPlus, Menu, Lock, Mail, Play, Plus, 
-  Grid, Bookmark, Heart, MoreHorizontal, Settings, Edit2 
+  Grid, Bookmark, Heart, MoreHorizontal, Settings, Edit2, Loader2 
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import InboxPanel from '../components/InboxPanel'
 
 export default function Profile() {
   const { user, profile, updateProfile, signOut } = useAuthStore()
-  const [activeTab, setActiveTab] = useState('grid') // 'grid' | 'inbox' | 'saved'
+  const [activeTab, setActiveTab] = useState('grid') // 'grid' | 'saved' | 'inbox'
   const [editing, setEditing] = useState(false)
   
   // Profile Form States
@@ -20,16 +20,23 @@ export default function Profile() {
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-  // Stats mockups based on user request (TikTok style)
-  const stats = {
-    following: '643',
-    followers: '146,6 mil',
-    likes: '566,2 mil'
+  // Media Pagination States
+  const [userMedia, setUserMedia] = useState([])
+  const [loadingMedia, setLoadingMedia] = useState(false)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+
+  // Format numbers (e.g., 1500 -> 1.5k)
+  const formatStat = (num) => {
+    if (!num) return '0'
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k'
+    return num.toString()
   }
 
   const handleSave = async () => {
     setSaving(true)
-    await updateProfile({ name, bio }) // ensure your backend accepts 'bio'
+    await updateProfile({ name, bio })
     setEditing(false)
     setSaving(false)
   }
@@ -55,15 +62,63 @@ export default function Profile() {
     }
   }
 
-  // Mock grid data for visual realistic TikTok look
-  const mockGrid = [
-    { id: 1, views: '12k', img: 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?auto=format&fit=crop&w=300&q=80' },
-    { id: 2, views: '3.4k', img: 'https://images.unsplash.com/photo-1542314831-c6a4d1409362?auto=format&fit=crop&w=300&q=80' },
-    { id: 3, views: '890', img: 'https://images.unsplash.com/photo-1493612276216-ee3925520721?auto=format&fit=crop&w=300&q=80' },
-    { id: 4, views: '5.1k', img: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=300&q=80' },
-    { id: 5, views: '11k', img: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=300&q=80' },
-    { id: 6, views: '2.2k', img: 'https://images.unsplash.com/photo-1511300636408-a63a89df3482?auto=format&fit=crop&w=300&q=80' },
-  ]
+  const fetchUserMedia = async (pageNum = 0) => {
+    if (loadingMedia || (!hasMore && pageNum > 0)) return
+    setLoadingMedia(true)
+    const limit = 9
+    const from = pageNum * limit
+    const to = from + limit - 1
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, type, media_url, media_urls, created_at')
+        .eq('user_id', user.id)
+        .in('type', ['IMAGE', 'VIDEO', 'MULTIPLE_MEDIA'])
+        .order('created_at', { ascending: false })
+        .range(from, to)
+
+      if (error) throw error
+
+      if (data) {
+        const extracted = []
+        data.forEach(msg => {
+          if (msg.type === 'MULTIPLE_MEDIA' && msg.media_urls) {
+            msg.media_urls.forEach((url, i) => {
+              extracted.push({ 
+                id: `${msg.id}-${i}`, 
+                url, 
+                isVideo: url.includes('.mp4') || url.includes('.webm') || url.includes('video'),
+                views: Math.floor(Math.random() * 500) + 10 // Mock views for realism
+              })
+            })
+          } else if (msg.media_url) {
+            extracted.push({ 
+              id: msg.id, 
+              url: msg.media_url, 
+              isVideo: msg.type === 'VIDEO',
+              views: Math.floor(Math.random() * 500) + 10
+            })
+          }
+        })
+        
+        if (data.length < limit) setHasMore(false)
+        setUserMedia(prev => pageNum === 0 ? extracted : [...prev, ...extracted])
+        setPage(pageNum + 1)
+      }
+    } catch (err) {
+      console.error('Error fetching media:', err)
+    } finally {
+      setLoadingMedia(false)
+    }
+  }
+
+  // Cargar medios al cambiar a pestaña grid o saved (ya que el usuario pidió que en "saved" estén sus archivos)
+  useEffect(() => {
+    if (user && (activeTab === 'grid' || activeTab === 'saved')) {
+      if (userMedia.length === 0) fetchUserMedia(0)
+    }
+  }, [user, activeTab])
 
   return (
     <div className="profile-container animate-fadeIn">
@@ -72,7 +127,7 @@ export default function Profile() {
         <div style={{ width: 24 }} /> {/* Spacer */}
         <h1 className="profile-username">
           {profile?.name || 'MinerAlert'}
-          <span className="text-[10px] bg-emerald-500/20 text-emerald-500 px-1.5 rounded">PRO</span>
+          <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded uppercase">PRO</span>
         </h1>
         <div className="profile-header-actions">
           <Settings size={22} className="cursor-pointer" onClick={() => signOut()} />
@@ -85,15 +140,15 @@ export default function Profile() {
         <div className="profile-stats-avatar-row">
           <div className="profile-stats">
             <div className="profile-stat-item">
-              <span className="profile-stat-value">{stats.following}</span>
+              <span className="profile-stat-value">{formatStat(profile?.following_count)}</span>
               <span className="profile-stat-label">Siguiendo</span>
             </div>
             <div className="profile-stat-item">
-              <span className="profile-stat-value">{stats.followers}</span>
+              <span className="profile-stat-value">{formatStat(profile?.followers_count)}</span>
               <span className="profile-stat-label">Seguidores</span>
             </div>
             <div className="profile-stat-item">
-              <span className="profile-stat-value">{stats.likes}</span>
+              <span className="profile-stat-value">{formatStat(profile?.likes_count)}</span>
               <span className="profile-stat-label">Me gusta</span>
             </div>
           </div>
@@ -101,6 +156,11 @@ export default function Profile() {
           <div className="profile-avatar-container">
             <input type="file" id="avatar-upload" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
             <div className="w-full h-full relative cursor-pointer" onClick={() => document.getElementById('avatar-upload').click()}>
+              {uploadingAvatar ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full z-10">
+                  <Loader2 size={24} className="animate-spin text-white" />
+                </div>
+              ) : null}
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="" className="profile-avatar" referrerPolicy="no-referrer" />
               ) : (
@@ -114,12 +174,20 @@ export default function Profile() {
         {/* ── Bio & Handle ── */}
         <div className="profile-bio-section">
           {editing ? (
-            <div className="space-y-2 mt-2">
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 ring-blue-500" />
-              <input value={bio} onChange={e => setBio(e.target.value)} placeholder="Tu biografía" className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 ring-blue-500" />
-              <div className="flex gap-2">
-                <button onClick={handleSave} className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-sm font-bold">Guardar</button>
-                <button onClick={() => setEditing(false)} className="flex-1 bg-slate-800 border border-slate-700 py-1.5 rounded-lg text-sm font-bold">Cancelar</button>
+            <div className="space-y-3 mt-2 relative z-10">
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider ml-1">Nombre</label>
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="Tu nombre" className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 ring-blue-500 mt-1" />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider ml-1">Biografía</label>
+                <input value={bio} onChange={e => setBio(e.target.value)} placeholder="Tu biografía" className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 ring-blue-500 mt-1" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={handleSave} disabled={saving} className="flex-1 flex justify-center bg-blue-600 text-white py-2 rounded-lg text-sm font-bold transition active:scale-95 disabled:opacity-50">
+                  {saving ? <Loader2 size={18} className="animate-spin" /> : 'Guardar'}
+                </button>
+                <button onClick={() => setEditing(false)} className="flex-1 bg-slate-800 border border-slate-700 py-2 rounded-lg text-sm font-bold transition active:scale-95">Cancelar</button>
               </div>
             </div>
           ) : (
@@ -130,7 +198,7 @@ export default function Profile() {
               
               <div className="profile-actions-row">
                 <button className="profile-action-btn" onClick={() => setEditing(true)}>Editar perfil</button>
-                <button className="profile-action-btn">Añadir amigos</button>
+                <button className="profile-action-btn flex items-center gap-1 justify-center"><UserPlus size={14}/> Añadir amigos</button>
               </div>
             </>
           )}
@@ -153,24 +221,63 @@ export default function Profile() {
       {/* ── Tab Content ── */}
       <div className="profile-content min-h-[400px]">
         {activeTab === 'grid' && (
-          <div className="profile-grid">
-            {mockGrid.map((item) => (
-              <div key={item.id} className="profile-grid-item group">
-                <img src={item.img} alt="" className="profile-grid-img" loading="lazy" />
-                <div className="profile-grid-views">
-                  <Play size={10} fill="currentColor" /> {item.views}
+          <div>
+            <div className="profile-grid">
+              {userMedia.map((item) => (
+                <div key={item.id} className="profile-grid-item group">
+                  {item.isVideo ? (
+                    <video src={item.url} className="profile-grid-img opacity-80" muted playsInline />
+                  ) : (
+                    <img src={item.url} alt="" className="profile-grid-img" loading="lazy" />
+                  )}
+                  <div className="profile-grid-views">
+                    <Play size={10} fill="currentColor" /> {item.views}
+                  </div>
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors pointer-events-none" />
                 </div>
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+              ))}
+            </div>
+            {hasMore && userMedia.length > 0 && (
+              <div className="p-4 flex justify-center">
+                <button onClick={() => fetchUserMedia(page)} disabled={loadingMedia} className="bg-slate-800 text-sm font-bold px-4 py-2 rounded-full flex items-center gap-2">
+                  {loadingMedia ? <Loader2 size={16} className="animate-spin" /> : 'Cargar más'}
+                </button>
               </div>
-            ))}
+            )}
+            {!loadingMedia && userMedia.length === 0 && (
+              <div className="text-center p-12 text-slate-500 text-sm">No tienes archivos en tu grid.</div>
+            )}
           </div>
         )}
 
         {activeTab === 'saved' && (
-          <div className="flex flex-col items-center justify-center p-12 text-center opacity-60">
-            <Lock size={48} className="mb-4 stroke-[1]" />
-            <h3 className="font-bold text-lg mb-1">Solo tú puedes ver esto</h3>
-            <p className="text-sm">Tus alertas guardadas aparecerán aquí.</p>
+          <div>
+            <div className="p-4 text-center">
+              <Lock size={32} className="mx-auto mb-2 opacity-50 stroke-[1.5]" />
+              <h3 className="font-bold text-sm">Solo tú puedes ver esto</h3>
+              <p className="text-xs text-slate-400 mt-1">Archivos que tú subiste (Media Privada)</p>
+            </div>
+            <div className="profile-grid">
+              {userMedia.map((item) => (
+                <div key={`priv-${item.id}`} className="profile-grid-item group">
+                  {item.isVideo ? (
+                    <video src={item.url} className="profile-grid-img opacity-80" muted playsInline />
+                  ) : (
+                    <img src={item.url} alt="" className="profile-grid-img" loading="lazy" />
+                  )}
+                  <div className="profile-grid-views">
+                    <Play size={10} fill="currentColor" /> {item.views}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {hasMore && userMedia.length > 0 && (
+              <div className="p-4 flex justify-center">
+                <button onClick={() => fetchUserMedia(page)} disabled={loadingMedia} className="bg-slate-800 text-sm font-bold px-4 py-2 rounded-full flex items-center gap-2">
+                  {loadingMedia ? <Loader2 size={16} className="animate-spin" /> : 'Cargar más'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -180,7 +287,6 @@ export default function Profile() {
           </div>
         )}
       </div>
-
     </div>
   )
 }
