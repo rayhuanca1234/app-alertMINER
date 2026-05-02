@@ -66,14 +66,36 @@ export default function MediaViewer({ mediaList = [], initialIndex = 0, onClose 
     }
   }
 
-  const handleDownload = () => {
-    const a = document.createElement('a')
-    a.href = currentMedia.url
-    a.download = `mineralert_media_${Date.now()}`
-    a.target = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    try {
+      setDownloading(true)
+      const response = await fetch(currentMedia.url)
+      const blob = await response.blob()
+
+      // Try to extract a meaningful file extension from the URL
+      const urlPath = new URL(currentMedia.url).pathname
+      const urlFilename = urlPath.split('/').pop() || ''
+      const extMatch = urlFilename.match(/\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|pdf|doc|docx|xls|xlsx|txt|zip|ogg|mp3|wav)(\?|$)/i)
+      const ext = extMatch ? extMatch[1] : (currentMedia.type === 'VIDEO' ? 'mp4' : 'jpg')
+      const filename = `mineralert_${Date.now()}.${ext}`
+
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      console.error('Download failed:', err)
+      // Fallback: open in new tab
+      window.open(currentMedia.url, '_blank')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (!mediaList || mediaList.length === 0) return null;
@@ -95,7 +117,9 @@ export default function MediaViewer({ mediaList = [], initialIndex = 0, onClose 
               <button onClick={() => setScale(s => Math.min(3, s + 0.25))} className="p-2 hover:bg-white/20 rounded-full"><ZoomIn size={20} /></button>
             </>
           )}
-          <button onClick={handleDownload} className="p-2 hover:bg-white/20 rounded-full"><Download size={20} /></button>
+          <button onClick={handleDownload} disabled={downloading} className={`p-2 hover:bg-white/20 rounded-full transition ${downloading ? 'animate-pulse opacity-50' : ''}`}>
+            {downloading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download size={20} />}
+          </button>
         </div>
       </div>
 
