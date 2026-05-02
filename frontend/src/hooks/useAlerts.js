@@ -23,18 +23,7 @@ export function useAlerts() {
     }
   }
 
-  // Show native OS notification with alert data so click → map + route
-  const showNotification = (alert) => {
-    const isOwn = alert.user_id === user?.id
-    const title = isOwn ? '✅ Tu alerta fue enviada' : '⚠️ ¡ALERTA MinerAlert!'
-    const body  = alert.description || '¡Se ha reportado una amenaza de seguridad!'
-    sendAlertNotification(title, body, {
-      alertId: alert.id,
-      lat: alert.latitude,
-      lng: alert.longitude,
-      desc: alert.description,
-    })
-  }
+  // Native notifications are now handled by Web Push (sw.js)
 
   useEffect(() => {
     // Request notification permissions
@@ -71,7 +60,6 @@ export function useAlerts() {
 
         addAlert(alert)
         playAlertSound()
-        showNotification(alert)
 
         // Add to notification inbox for everyone (including sender)
         import('../store/notificationStore').then(module => {

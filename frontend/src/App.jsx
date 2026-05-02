@@ -53,7 +53,13 @@ export default function App() {
   useEffect(() => {
     if (user) {
       // Subscribe to Web Push Notifications (if supported and permitted)
-      subscribeToPushNotifications(user.id)
+      import('./lib/pushService').then(({ requestNotificationPermission, subscribeToPushNotifications }) => {
+        requestNotificationPermission().then(status => {
+          if (status === 'granted') {
+            subscribeToPushNotifications(user.id)
+          }
+        })
+      })
       
       // Fetch initial notifications
       fetchNotifications(user.id)
