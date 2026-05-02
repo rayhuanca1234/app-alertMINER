@@ -70,11 +70,11 @@ self.addEventListener('notificationclick', (event) => {
   // Build URL: if we have coords → route mode; else just open the map
   let targetUrl = '/'
   
-  if (type === 'chat' || messageId) {
+  if (event.action === 'chat' || type === 'chat' || messageId) {
     targetUrl = '/chat'
-  } else if (lat && lng) {
+  } else if (event.action === 'map' || (lat && lng)) {
     const encodedDesc = encodeURIComponent(desc || 'Alerta')
-    targetUrl = `/map?alertId=${alertId || ''}&lat=${lat}&lng=${lng}&route=true&desc=${encodedDesc}`
+    targetUrl = `/map?alertId=${alertId || ''}&lat=${lat || ''}&lng=${lng || ''}&route=true&desc=${encodedDesc}`
   } else if (alertId) {
     targetUrl = `/map?alertId=${alertId}&route=true`
   }
@@ -83,7 +83,13 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Check if there is already a window/tab open with the target URL
+      // If it's an action button click, Android often blocks background focus(). 
+      // We must use openWindow to force the OS to bring the PWA to the foreground.
+      if (event.action && clients.openWindow) {
+        return clients.openWindow(fullUrl);
+      }
+
+      // Check if there is already a window/tab open with the exact target URL
       for (let i = 0; i < windowClients.length; i++) {
         let client = windowClients[i];
         if (client.url === fullUrl && 'focus' in client) {
