@@ -82,7 +82,7 @@ export const useChatStore = create((set, get) => ({
     // Fetch messages with profile + reply info
     const { data, error } = await supabase
       .from('messages')
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -123,7 +123,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data } = await supabase
       .from('messages')
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .eq('channel_id', state.activeChannel)
       .lt('created_at', oldest.created_at)
       .order('created_at', { ascending: false })
@@ -158,7 +158,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) return { error }
@@ -243,7 +243,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) {
@@ -337,7 +337,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) {
@@ -399,7 +399,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) {
@@ -431,7 +431,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) return { error }
@@ -478,7 +478,7 @@ export const useChatStore = create((set, get) => ({
 
     const { data, error } = await supabase.from('messages')
       .insert(insertData)
-      .select('*, profiles(name, avatar_url), reply:reply_to(id, content, type, profiles(name), media_url, media_urls, file_metadata)')
+      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
       .single()
 
     if (error) return { error }

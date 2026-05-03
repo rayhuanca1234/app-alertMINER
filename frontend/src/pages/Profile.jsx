@@ -1,5 +1,5 @@
 import './Profile.css'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useAlertStore } from '../store/alertStore'
 import { 
@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import InboxPanel from '../components/InboxPanel'
+import TikTokViewer from '../components/TikTokViewer'
+import ProfileDrawer from '../components/ProfileDrawer'
 
 export default function Profile() {
   const { user, profile, updateProfile, signOut } = useAuthStore()
@@ -19,12 +21,18 @@ export default function Profile() {
   const [bio, setBio] = useState(profile?.bio || 'Aprovecha la vida que el tiempo nos gana')
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  
+  // UI States
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [isViewerOpen, setIsViewerOpen] = useState(false)
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0)
 
   // Media Pagination States
   const [userMedia, setUserMedia] = useState([])
   const [loadingMedia, setLoadingMedia] = useState(false)
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
+  const observerTarget = useRef(null)
 
   // Format numbers (e.g., 1500 -> 1.5k)
   const formatStat = (num) => {
@@ -72,7 +80,7 @@ export default function Profile() {
     try {
       const { data, error } = await supabase
         .from('messages')
-        .select('id, type, media_url, media_urls, created_at')
+        .select('id, type, media_url, media_urls, created_at, views')
         .eq('user_id', user.id)
         .in('type', ['IMAGE', 'VIDEO', 'MULTIPLE_MEDIA'])
         .order('created_at', { ascending: false })
@@ -89,7 +97,7 @@ export default function Profile() {
                 id: `${msg.id}-${i}`, 
                 url, 
                 isVideo: url.includes('.mp4') || url.includes('.webm') || url.includes('video'),
-                views: Math.floor(Math.random() * 500) + 10 // Mock views for realism
+                views: msg.views || 0
               })
             })
           } else if (msg.media_url) {
@@ -97,7 +105,7 @@ export default function Profile() {
               id: msg.id, 
               url: msg.media_url, 
               isVideo: msg.type === 'VIDEO',
-              views: Math.floor(Math.random() * 500) + 10
+              views: msg.views || 0
             })
           }
         })
@@ -113,12 +121,30 @@ export default function Profile() {
     }
   }
 
-  // Cargar medios al cambiar a pestaña grid o saved (ya que el usuario pidió que en "saved" estén sus archivos)
+  // Cargar medios al cambiar a pestaña grid o saved
   useEffect(() => {
     if (user && (activeTab === 'grid' || activeTab === 'saved')) {
       if (userMedia.length === 0) fetchUserMedia(0)
     }
   }, [user, activeTab])
+
+  // Infinite Scroll Observer para el Grid
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loadingMedia) {
+          fetchUserMedia(page)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [hasMore, loadingMedia, page])
 
   return (
     <div className="profile-container animate-fadeIn">
@@ -130,8 +156,8 @@ export default function Profile() {
           <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded uppercase">PRO</span>
         </h1>
         <div className="profile-header-actions">
-          <Settings size={22} className="cursor-pointer" onClick={() => signOut()} />
-          <Menu size={22} className="cursor-pointer" />
+          <Settings size={22} className="cursor-pointer" onClick={() => setIsDrawerOpen(true)} />
+          <Menu size={22} className="cursor-pointer" onClick={() => setIsDrawerOpen(true)} />
         </div>
       </div>
 
@@ -223,8 +249,12 @@ export default function Profile() {
         {activeTab === 'grid' && (
           <div>
             <div className="profile-grid">
-              {userMedia.map((item) => (
-                <div key={item.id} className="profile-grid-item group">
+              {userMedia.map((item, index) => (
+                <div 
+                  key={item.id} 
+                  className="profile-grid-item group cursor-pointer"
+                  onClick={() => { setSelectedMediaIndex(index); setIsViewerOpen(true); }}
+                >
                   {item.isVideo ? (
                     <video src={item.url} className="profile-grid-img opacity-80" muted playsInline />
                   ) : (
@@ -238,10 +268,8 @@ export default function Profile() {
               ))}
             </div>
             {hasMore && userMedia.length > 0 && (
-              <div className="p-4 flex justify-center">
-                <button onClick={() => fetchUserMedia(page)} disabled={loadingMedia} className="bg-slate-800 text-sm font-bold px-4 py-2 rounded-full flex items-center gap-2">
-                  {loadingMedia ? <Loader2 size={16} className="animate-spin" /> : 'Cargar más'}
-                </button>
+              <div ref={observerTarget} className="p-8 flex justify-center w-full">
+                {loadingMedia && <Loader2 size={24} className="animate-spin text-slate-500" />}
               </div>
             )}
             {!loadingMedia && userMedia.length === 0 && (
@@ -258,8 +286,12 @@ export default function Profile() {
               <p className="text-xs text-slate-400 mt-1">Archivos que tú subiste (Media Privada)</p>
             </div>
             <div className="profile-grid">
-              {userMedia.map((item) => (
-                <div key={`priv-${item.id}`} className="profile-grid-item group">
+              {userMedia.map((item, index) => (
+                <div 
+                  key={`priv-${item.id}`} 
+                  className="profile-grid-item group cursor-pointer"
+                  onClick={() => { setSelectedMediaIndex(index); setIsViewerOpen(true); }}
+                >
                   {item.isVideo ? (
                     <video src={item.url} className="profile-grid-img opacity-80" muted playsInline />
                   ) : (
@@ -272,10 +304,8 @@ export default function Profile() {
               ))}
             </div>
             {hasMore && userMedia.length > 0 && (
-              <div className="p-4 flex justify-center">
-                <button onClick={() => fetchUserMedia(page)} disabled={loadingMedia} className="bg-slate-800 text-sm font-bold px-4 py-2 rounded-full flex items-center gap-2">
-                  {loadingMedia ? <Loader2 size={16} className="animate-spin" /> : 'Cargar más'}
-                </button>
+              <div ref={observerTarget} className="p-8 flex justify-center w-full">
+                {loadingMedia && <Loader2 size={24} className="animate-spin text-slate-500" />}
               </div>
             )}
           </div>
@@ -287,6 +317,21 @@ export default function Profile() {
           </div>
         )}
       </div>
+
+      {/* Drawer & Viewer Overlays */}
+      <ProfileDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+      
+      {isViewerOpen && (
+        <TikTokViewer 
+          mediaList={userMedia} 
+          initialIndex={selectedMediaIndex} 
+          onClose={() => setIsViewerOpen(false)} 
+          onLoadMore={() => {
+            if (hasMore && !loadingMedia) fetchUserMedia(page)
+          }}
+          hasMore={hasMore}
+        />
+      )}
     </div>
   )
 }
