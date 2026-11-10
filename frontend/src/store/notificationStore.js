@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { fetchWithAuth } from '../lib/auth_client'
 
 export const useNotificationStore = create((set, get) => ({
   notifications: [],
@@ -9,55 +9,61 @@ export const useNotificationStore = create((set, get) => ({
 
   setGlobalChannel: (channel) => set({ globalChannel: channel }),
 
-  fetchNotifications: async (userId) => {
+  fetchNotifications: async () => {
     set({ loading: true })
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-
-    if (!error && data) {
-      set({
-        notifications: data,
-        unreadCount: data.filter(n => !n.is_read).length,
-        loading: false
-      })
-    } else {
-      set({ loading: false })
+    try {
+      const res = await fetchWithAuth('/api/data/notifications', { redirectOn401: false })
+      if (res.ok) {
+        const { data } = await res.json()
+        if (data) {
+          set({
+            notifications: data,
+            unreadCount: data.filter(n => !n.is_read).length,
+            loading: false
+          })
+          return
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching notifications:', e)
     }
+    set({ loading: false })
   },
 
   markAsRead: async (notificationId) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', notificationId)
-
-    if (!error) {
-      set(state => {
-        const next = state.notifications.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
-        return {
-          notifications: next,
-          unreadCount: next.filter(n => !n.is_read).length
-        }
+    try {
+      const res = await fetchWithAuth('/api/data/notifications/read', {
+        method: 'PUT',
+        body: JSON.stringify({ id: notificationId })
       })
+      if (res.ok) {
+        set(state => {
+          const next = state.notifications.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
+          return {
+            notifications: next,
+            unreadCount: next.filter(n => !n.is_read).length
+          }
+        })
+      }
+    } catch (e) {
+      console.error('Error marking notification as read:', e)
     }
   },
 
-  markAllAsRead: async (userId) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('user_id', userId)
-      .eq('is_read', false)
-
-    if (!error) {
-      set(state => ({
-        notifications: state.notifications.map(n => ({ ...n, is_read: true })),
-        unreadCount: 0
-      }))
+  markAllAsRead: async () => {
+    try {
+      const res = await fetchWithAuth('/api/data/notifications/read', {
+        method: 'PUT',
+        body: JSON.stringify({ all: true })
+      })
+      if (res.ok) {
+        set(state => ({
+          notifications: state.notifications.map(n => ({ ...n, is_read: true })),
+          unreadCount: 0
+        }))
+      }
+    } catch (e) {
+      console.error('Error marking all notifications as read:', e)
     }
   },
 
@@ -77,7 +83,6 @@ export const useNotificationStore = create((set, get) => ({
 
   addNotificationLocally: (payload) => {
     set(state => {
-      // Prevent duplicates by id AND by related_id (covers both 'sent-X' and broadcast 'X')
       const alreadyExists =
         state.notifications.find(n => n.id === payload.id) ||
         (payload.related_id &&
@@ -88,10 +93,9 @@ export const useNotificationStore = create((set, get) => ({
 
       const normalizedPayload = {
         ...payload,
-        body: payload.body || payload.message // Ensure body exists for InboxPanel
+        body: payload.body || payload.message
       }
 
-      // If it's a chat message, we don't want it in the Inbox. Just skip adding it to the state array.
       if (normalizedPayload.type === 'chat') {
         return state
       }
@@ -103,7 +107,6 @@ export const useNotificationStore = create((set, get) => ({
       }
     })
 
-    // Trigger in-app WhatsApp-style toast automatically for ALL types (including chat)
     get().showToast(payload.title, payload.body || payload.message, payload.metadata?.sender_avatar, payload.type)
   }
 }))

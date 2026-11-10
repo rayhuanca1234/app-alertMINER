@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { fetchWithAuth, getBackendUrl } from '../lib/auth_client'
+import { uploadFileToR2, deleteFileFromR2 } from '../lib/cloudflare_client'
 
 const triggerChatPush = async (messageData) => {
   try {
@@ -7,17 +8,17 @@ const triggerChatPush = async (messageData) => {
       ...messageData,
       sender_name: messageData.profiles?.name || 'Alguien',
       avatar_url: messageData.profiles?.avatar_url
-    };
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+    }
+    const backendUrl = getBackendUrl()
     await fetch(`${backendUrl}/api/push/broadcast-chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: payload })
-    });
+    })
   } catch (e) {
-    console.error('Error triggering chat push:', e);
+    console.error('Error triggering chat push:', e)
   }
-};
+}
 
 const DEFAULT_CHANNEL_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -41,17 +42,10 @@ export const useChatStore = create((set, get) => ({
   ensureDbReady: async () => {
     if (get().dbReady) return true
     try {
-      const { data, error } = await supabase.from('channels').select('id').limit(1)
-      if (error) {
-        set({ error: `Base de datos no configurada. (${error.message})` })
+      const res = await fetchWithAuth('/api/data/channels', { redirectOn401: false })
+      if (!res.ok) {
+        set({ error: `Error conectando con Cloudflare D1 (${res.status})` })
         return false
-      }
-      if (!data || data.length === 0) {
-        await supabase.from('channels').insert([
-          { id: '00000000-0000-0000-0000-000000000001', name: 'General', description: 'Canal principal de comunicación comunitaria' },
-          { id: '00000000-0000-0000-0000-000000000002', name: 'Alertas', description: 'Canal automático de alertas de seguridad' },
-          { id: '00000000-0000-0000-0000-000000000003', name: 'Coordinación', description: 'Canal de coordinación y logística' },
-        ])
       }
       set({ dbReady: true, error: null })
       return true
@@ -64,12 +58,19 @@ export const useChatStore = create((set, get) => ({
   fetchChannels: async () => {
     const ready = await get().ensureDbReady()
     if (!ready) return
-    const { data } = await supabase.from('channels').select('*').order('created_at', { ascending: true })
-    if (data && data.length > 0) {
-      set({ channels: data })
-      if (!data.find(c => c.id === get().activeChannel)) {
-        set({ activeChannel: data[0].id })
+    try {
+      const res = await fetchWithAuth('/api/data/channels', { redirectOn401: false })
+      if (res.ok) {
+        const { data } = await res.json()
+        if (data && data.length > 0) {
+          set({ channels: data })
+          if (!data.find(c => c.id === get().activeChannel)) {
+            set({ activeChannel: data[0].id })
+          }
+        }
       }
+    } catch (e) {
+      console.error('Error fetching channels:', e)
     }
   },
 
@@ -79,37 +80,21 @@ export const useChatStore = create((set, get) => ({
     set({ loading: true })
     const channelId = get().activeChannel
 
-    // Fetch messages with profile + reply info
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .eq('channel_id', channelId)
-      .order('created_at', { ascending: false })
-      .limit(limit)
-
-    if (error) {
-      set({ loading: false, error: `Error cargando mensajes: ${error.message}` })
-      return
-    }
-
-    if (data) {
-      // Fetch reactions for these messages
-      const msgIds = data.map(m => m.id)
-      const { data: reactions } = await supabase
-        .from('message_reactions')
-        .select('*, profiles(name)')
-        .in('message_id', msgIds)
-
-      const reactionsMap = {}
-      if (reactions) {
-        reactions.forEach(r => {
-          if (!reactionsMap[r.message_id]) reactionsMap[r.message_id] = []
-          reactionsMap[r.message_id].push(r)
-        })
+    try {
+      const res = await fetchWithAuth(
+        `/api/data/messages?channel_id=${encodeURIComponent(channelId)}&limit=${limit}`,
+        { redirectOn401: false }
+      )
+      if (!res.ok) {
+        set({ loading: false, error: `Error cargando mensajes (${res.status})` })
+        return
       }
-
-      const enriched = data.map(m => ({ ...m, reactions: reactionsMap[m.id] || [] }))
-      set({ messages: enriched.reverse(), hasMore: data.length === limit, error: null })
+      const { data } = await res.json()
+      if (data) {
+        set({ messages: [...data].reverse(), hasMore: data.length === limit, error: null })
+      }
+    } catch (e) {
+      set({ error: `Error cargando mensajes: ${e.message}` })
     }
     set({ loading: false })
   },
@@ -121,19 +106,22 @@ export const useChatStore = create((set, get) => ({
     const oldest = state.messages[0]
     if (!oldest) return set({ loading: false })
 
-    const { data } = await supabase
-      .from('messages')
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .eq('channel_id', state.activeChannel)
-      .lt('created_at', oldest.created_at)
-      .order('created_at', { ascending: false })
-      .limit(30)
-
-    if (data) {
-      set({
-        messages: [...data.reverse().map(m => ({ ...m, reactions: [] })), ...state.messages],
-        hasMore: data.length === 30
-      })
+    try {
+      const res = await fetchWithAuth(
+        `/api/data/messages?channel_id=${encodeURIComponent(state.activeChannel)}&before=${encodeURIComponent(oldest.created_at)}&limit=30`,
+        { redirectOn401: false }
+      )
+      if (res.ok) {
+        const { data } = await res.json()
+        if (data) {
+          set({
+            messages: [...data.reverse(), ...state.messages],
+            hasMore: data.length === 30
+          })
+        }
+      }
+    } catch (e) {
+      console.error('Error loading more messages:', e)
     }
     set({ loading: false })
   },
@@ -156,54 +144,57 @@ export const useChatStore = create((set, get) => ({
     }
     if (replyId) insertData.reply_to = replyId
 
-    const { data, error } = await supabase.from('messages')
-      .insert(insertData)
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .single()
+    try {
+      const res = await fetchWithAuth('/api/data/messages', {
+        method: 'POST',
+        body: JSON.stringify(insertData)
+      })
+      const { data, error } = await res.json()
+      if (!res.ok || error) return { error: new Error(error || 'Error enviando mensaje') }
 
-    if (error) return { error }
-    if (data) { 
-      get().addMessage(data); 
-      set({ replyTo: null }) 
-      
-      const channel = get().currentChannel
-      if (channel) {
-        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      if (data) {
+        get().addMessage(data)
+        set({ replyTo: null })
+
+        const channel = get().currentChannel
+        if (channel) {
+          channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+        }
+
+        const { useNotificationStore } = await import('./notificationStore')
+        const globalChannel = useNotificationStore.getState().globalChannel
+        if (globalChannel) {
+          globalChannel.send({
+            type: 'broadcast',
+            event: 'new_notification',
+            payload: {
+              id: data.id,
+              sender_id: userId,
+              title: `💬 ${data.profiles?.name || 'Alguien'}`,
+              message: content,
+              type: 'chat',
+              related_id: channelId,
+              is_read: false,
+              created_at: new Date().toISOString()
+            }
+          })
+        }
+        triggerChatPush(data)
       }
-      
-      // Also broadcast to global-notifications so users not in the chat receive the toast/inbox update
-      const { useNotificationStore } = await import('./notificationStore')
-      const globalChannel = useNotificationStore.getState().globalChannel
-      if (globalChannel) {
-        globalChannel.send({
-          type: 'broadcast',
-          event: 'new_notification',
-          payload: {
-             id: data.id,
-             sender_id: userId,
-             title: `💬 ${data.profiles?.name || 'Alguien'}`,
-             message: content,
-             type: 'chat',
-             related_id: channelId,
-             is_read: false,
-             created_at: new Date().toISOString()
-          }
-        })
-      }
-      triggerChatPush(data)
+      return { error: null }
+    } catch (error) {
+      return { error }
     }
-    return { error: null }
   },
 
   sendMediaMessage: async (file, type, userId, replyId, caption) => {
     const state = get()
     const channelId = state.activeChannel
-    
-    // Optimistic UI
+
     const localId = 'temp-' + Date.now()
     const contentLabel = caption || (type === 'IMAGE' ? '📷 Imagen' : type === 'VIDEO' ? '🎬 Video' : '🎤 Audio')
     const localUrl = URL.createObjectURL(file)
-    
+
     const tempMessage = {
       id: localId,
       user_id: userId,
@@ -217,78 +208,69 @@ export const useChatStore = create((set, get) => ({
     }
     get().addMessage(tempMessage)
 
-    const fileExt = file.name?.split('.').pop() || (type === 'AUDIO' ? 'webm' : 'bin')
-    const filePath = `${channelId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
+    try {
+      const uploaded = await uploadFileToR2(file)
+      const mediaUrl = uploaded.publicUrl
 
-    const { error: uploadError } = await supabase.storage
-      .from('chat-media')
-      .upload(filePath, file, { upsert: false })
+      const insertData = {
+        user_id: userId,
+        channel_id: channelId,
+        type,
+        content: contentLabel,
+        media_url: mediaUrl
+      }
+      if (replyId) insertData.reply_to = replyId
 
-    if (uploadError) {
-      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
-      return { error: uploadError }
-    }
+      const res = await fetchWithAuth('/api/data/messages', {
+        method: 'POST',
+        body: JSON.stringify(insertData)
+      })
+      const { data, error } = await res.json()
+      if (!res.ok || error) {
+        set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+        return { error: new Error(error || 'Error guardando mensaje') }
+      }
 
-    const { data: urlData } = supabase.storage.from('chat-media').getPublicUrl(filePath)
-    const mediaUrl = urlData?.publicUrl
+      if (data) {
+        set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
+        set({ replyTo: null })
 
-    const insertData = {
-      user_id: userId,
-      channel_id: channelId,
-      type,
-      content: contentLabel,
-      media_url: mediaUrl
-    }
-    if (replyId) insertData.reply_to = replyId
+        const channel = get().currentChannel
+        if (channel) {
+          channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+        }
 
-    const { data, error } = await supabase.from('messages')
-      .insert(insertData)
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .single()
-
-    if (error) {
+        const { useNotificationStore } = await import('./notificationStore')
+        const globalChannel = useNotificationStore.getState().globalChannel
+        if (globalChannel) {
+          globalChannel.send({
+            type: 'broadcast',
+            event: 'new_notification',
+            payload: {
+              id: data.id,
+              sender_id: userId,
+              title: `💬 ${data.profiles?.name || 'Alguien'}`,
+              message: contentLabel,
+              type: 'chat',
+              related_id: channelId,
+              is_read: false,
+              created_at: new Date().toISOString()
+            }
+          })
+        }
+        triggerChatPush({ ...data, content: contentLabel })
+      }
+      return { error: null }
+    } catch (error) {
       set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
       return { error }
     }
-
-    if (data) { 
-      set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
-      set({ replyTo: null }) 
-      
-      const channel = get().currentChannel
-      if (channel) {
-        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
-      }
-      
-      // Also broadcast to global-notifications
-      const { useNotificationStore } = await import('./notificationStore')
-      const globalChannel = useNotificationStore.getState().globalChannel
-      if (globalChannel) {
-        globalChannel.send({
-          type: 'broadcast',
-          event: 'new_notification',
-          payload: {
-             id: data.id,
-             sender_id: userId,
-             title: `💬 ${data.profiles?.name || 'Alguien'}`,
-             message: contentLabel,
-             type: 'chat',
-             related_id: channelId,
-             is_read: false,
-             created_at: new Date().toISOString()
-          }
-        })
-      }
-      triggerChatPush({ ...data, content: contentLabel })
-    }
-    return { error: null }
   },
 
   sendMultipleMediaMessage: async (files, type, userId, replyId, caption) => {
     const state = get()
     const channelId = state.activeChannel
 
-    // Optimistic UI update: local message
     const localId = 'temp-' + Date.now()
     const localUrls = files.map(f => URL.createObjectURL(f))
     const tempMessage = {
@@ -304,64 +286,66 @@ export const useChatStore = create((set, get) => ({
     }
     get().addMessage(tempMessage)
 
-    // Upload files to Supabase
-    const uploadPromises = files.map(async (file) => {
-      const fileExt = file.name?.split('.').pop() || 'bin'
-      const filePath = `${channelId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
-      const { error } = await supabase.storage.from('chat-media').upload(filePath, file)
-      if (error) return null
-      const { data } = supabase.storage.from('chat-media').getPublicUrl(filePath)
-      return data?.publicUrl
-    })
+    try {
+      const uploadPromises = files.map(async (file) => {
+        try {
+          const uploaded = await uploadFileToR2(file)
+          return uploaded.publicUrl
+        } catch {
+          return null
+        }
+      })
 
-    const urls = await Promise.all(uploadPromises)
-    const validUrls = urls.filter(Boolean)
+      const urls = await Promise.all(uploadPromises)
+      const validUrls = urls.filter(Boolean)
 
-    if (validUrls.length === 0) {
-      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
-      return { error: new Error('Error subiendo archivos') }
-    }
+      if (validUrls.length === 0) {
+        set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+        return { error: new Error('Error subiendo archivos a R2') }
+      }
 
-    const insertData = {
-      user_id: userId,
-      channel_id: channelId,
-      type: validUrls.length > 1 ? 'MULTIPLE_MEDIA' : type,
-      content: caption || (type === 'IMAGE' ? '📷 Imagen' : '🎬 Video'),
-      media_urls: validUrls
-    }
-    if (validUrls.length === 1) {
-      insertData.media_url = validUrls[0]
-      insertData.media_urls = null
-    }
-    if (replyId) insertData.reply_to = replyId
+      const insertData = {
+        user_id: userId,
+        channel_id: channelId,
+        type: validUrls.length > 1 ? 'MULTIPLE_MEDIA' : type,
+        content: caption || (type === 'IMAGE' ? '📷 Imagen' : '🎬 Video'),
+        media_urls: validUrls
+      }
+      if (validUrls.length === 1) {
+        insertData.media_url = validUrls[0]
+        insertData.media_urls = null
+      }
+      if (replyId) insertData.reply_to = replyId
 
-    const { data, error } = await supabase.from('messages')
-      .insert(insertData)
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .single()
+      const res = await fetchWithAuth('/api/data/messages', {
+        method: 'POST',
+        body: JSON.stringify(insertData)
+      })
+      const { data, error } = await res.json()
+      if (!res.ok || error) {
+        set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+        return { error: new Error(error || 'Error guardando multimedia') }
+      }
 
-    if (error) {
+      set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
+      set({ replyTo: null })
+
+      const channel = get().currentChannel
+      if (channel) {
+        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      }
+      triggerChatPush(data)
+      return { error: null }
+    } catch (error) {
       set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
       return { error }
     }
-    
-    // Replace temp message
-    set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
-    set({ replyTo: null })
-    
-    const channel = get().currentChannel
-    if (channel) {
-      channel.send({ type: 'broadcast', event: 'new_message', payload: data })
-    }
-    triggerChatPush(data)
-    return { error: null }
   },
 
   sendFileMessage: async (file, userId, replyId) => {
     const state = get()
     const channelId = state.activeChannel
 
-    // Optimistic UI
     const localId = 'temp-' + Date.now()
     const tempMessage = {
       id: localId,
@@ -376,45 +360,40 @@ export const useChatStore = create((set, get) => ({
     }
     get().addMessage(tempMessage)
 
-    const fileExt = file.name?.split('.').pop() || 'bin'
-    const filePath = `${channelId}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`
+    try {
+      const uploaded = await uploadFileToR2(file)
+      const insertData = {
+        user_id: userId,
+        channel_id: channelId,
+        type: 'FILE',
+        content: '📎 Documento adjunto',
+        media_url: uploaded.publicUrl,
+        file_metadata: { name: file.name, size: file.size }
+      }
+      if (replyId) insertData.reply_to = replyId
 
-    const { error: uploadError } = await supabase.storage.from('chat-media').upload(filePath, file)
-    if (uploadError) {
-      set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
-      return { error: uploadError }
-    }
+      const res = await fetchWithAuth('/api/data/messages', {
+        method: 'POST',
+        body: JSON.stringify(insertData)
+      })
+      const { data, error } = await res.json()
+      if (!res.ok || error) {
+        set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
+        return { error: new Error(error || 'Error enviando archivo') }
+      }
 
-    const { data: urlData } = supabase.storage.from('chat-media').getPublicUrl(filePath)
-    
-    const insertData = {
-      user_id: userId,
-      channel_id: channelId,
-      type: 'FILE',
-      content: '📎 Documento adjunto',
-      media_url: urlData?.publicUrl,
-      file_metadata: { name: file.name, size: file.size }
-    }
-    if (replyId) insertData.reply_to = replyId
-
-    const { data, error } = await supabase.from('messages')
-      .insert(insertData)
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .single()
-
-    if (error) {
+      set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
+      set({ replyTo: null })
+      const channel = get().currentChannel
+      if (channel) {
+        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      }
+      triggerChatPush(data)
+      return { error: null }
+    } catch (error) {
       set(s => ({ messages: s.messages.filter(m => m.id !== localId) }))
       return { error }
     }
-
-    set(s => ({ messages: s.messages.map(m => m.id === localId ? { ...data, reactions: [] } : m) }))
-    set({ replyTo: null })
-    const channel = get().currentChannel
-    if (channel) {
-      channel.send({ type: 'broadcast', event: 'new_message', payload: data })
-    }
-    triggerChatPush(data)
-    return { error: null }
   },
 
   sendLocationMessage: async (content, lat, lng, userId, replyId) => {
@@ -429,42 +408,47 @@ export const useChatStore = create((set, get) => ({
     }
     if (replyId) insertData.reply_to = replyId
 
-    const { data, error } = await supabase.from('messages')
-      .insert(insertData)
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .single()
+    try {
+      const res = await fetchWithAuth('/api/data/messages', {
+        method: 'POST',
+        body: JSON.stringify(insertData)
+      })
+      const { data, error } = await res.json()
+      if (!res.ok || error) return { error: new Error(error || 'Error enviando ubicación') }
 
-    if (error) return { error }
-    if (data) { 
-      get().addMessage(data); 
-      set({ replyTo: null }) 
-      
-      const channel = get().currentChannel
-      if (channel) {
-        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      if (data) {
+        get().addMessage(data)
+        set({ replyTo: null })
+
+        const channel = get().currentChannel
+        if (channel) {
+          channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+        }
+
+        const { useNotificationStore } = await import('./notificationStore')
+        const globalChannel = useNotificationStore.getState().globalChannel
+        if (globalChannel) {
+          globalChannel.send({
+            type: 'broadcast',
+            event: 'new_notification',
+            payload: {
+              id: data.id,
+              sender_id: userId,
+              title: `💬 ${data.profiles?.name || 'Alguien'}`,
+              message: insertData.content,
+              type: 'chat',
+              related_id: channelId,
+              is_read: false,
+              created_at: new Date().toISOString()
+            }
+          })
+        }
+        triggerChatPush({ ...data, content: insertData.content })
       }
-      
-      const { useNotificationStore } = await import('./notificationStore')
-      const globalChannel = useNotificationStore.getState().globalChannel
-      if (globalChannel) {
-        globalChannel.send({
-          type: 'broadcast',
-          event: 'new_notification',
-          payload: {
-             id: data.id,
-             sender_id: userId,
-             title: `💬 ${data.profiles?.name || 'Alguien'}`,
-             message: insertData.content,
-             type: 'chat',
-             related_id: channelId,
-             is_read: false,
-             created_at: new Date().toISOString()
-          }
-        })
-      }
-      triggerChatPush({ ...data, content: insertData.content })
+      return { error: null }
+    } catch (error) {
+      return { error }
     }
-    return { error: null }
   },
 
   forwardMessage: async (message, targetChannelId, userId) => {
@@ -476,44 +460,47 @@ export const useChatStore = create((set, get) => ({
       media_url: message.media_url
     }
 
-    const { data, error } = await supabase.from('messages')
-      .insert(insertData)
-      .select('*, profiles!messages_user_id_fkey(name, avatar_url), reply:reply_to(id, content, type, profiles!messages_user_id_fkey(name), media_url, media_urls, file_metadata)')
-      .single()
+    try {
+      const res = await fetchWithAuth('/api/data/messages', {
+        method: 'POST',
+        body: JSON.stringify(insertData)
+      })
+      const { data, error } = await res.json()
+      if (!res.ok || error) return { error: new Error(error || 'Error reenviando mensaje') }
 
-    if (error) return { error }
-    
-    // Si estamos en ese canal, actualizar la UI local
-    if (data && get().activeChannel === targetChannelId) { 
-      get().addMessage(data); 
-      const channel = get().currentChannel
-      if (channel) {
-        channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+      if (data && get().activeChannel === targetChannelId) {
+        get().addMessage(data)
+        const channel = get().currentChannel
+        if (channel) {
+          channel.send({ type: 'broadcast', event: 'new_message', payload: data })
+        }
       }
-    }
-    
-    if (data) {
-      const { useNotificationStore } = await import('./notificationStore')
-      const globalChannel = useNotificationStore.getState().globalChannel
-      if (globalChannel) {
-        globalChannel.send({
-          type: 'broadcast',
-          event: 'new_notification',
-          payload: {
-             id: data.id,
-             sender_id: userId,
-             title: `💬 ${data.profiles?.name || 'Alguien'}`,
-             message: message.type === 'TEXT' ? message.content : 'Multimedia (Reenviado)',
-             type: 'chat',
-             related_id: targetChannelId,
-             is_read: false,
-             created_at: new Date().toISOString()
-          }
-        })
+
+      if (data) {
+        const { useNotificationStore } = await import('./notificationStore')
+        const globalChannel = useNotificationStore.getState().globalChannel
+        if (globalChannel) {
+          globalChannel.send({
+            type: 'broadcast',
+            event: 'new_notification',
+            payload: {
+              id: data.id,
+              sender_id: userId,
+              title: `💬 ${data.profiles?.name || 'Alguien'}`,
+              message: message.type === 'TEXT' ? message.content : 'Multimedia (Reenviado)',
+              type: 'chat',
+              related_id: targetChannelId,
+              is_read: false,
+              created_at: new Date().toISOString()
+            }
+          })
+        }
+        triggerChatPush({ ...data, content: message.type === 'TEXT' ? message.content : 'Multimedia (Reenviado)' })
       }
-      triggerChatPush({ ...data, content: message.type === 'TEXT' ? message.content : 'Multimedia (Reenviado)' })
+      return { error: null }
+    } catch (error) {
+      return { error }
     }
-    return { error: null }
   },
 
   toggleReaction: async (messageId, emoji, userId) => {
@@ -525,7 +512,7 @@ export const useChatStore = create((set, get) => ({
     const channel = get().currentChannel
 
     if (existing) {
-      await supabase.from('message_reactions').delete().eq('id', existing.id)
+      await fetchWithAuth(`/api/data/reactions/${existing.id}`, { method: 'DELETE' })
       set({
         messages: state.messages.map(m =>
           m.id === messageId
@@ -537,21 +524,23 @@ export const useChatStore = create((set, get) => ({
         channel.send({ type: 'broadcast', event: 'reaction_remove', payload: { messageId, reactionId: existing.id } })
       }
     } else {
-      const { data } = await supabase.from('message_reactions')
-        .insert({ message_id: messageId, user_id: userId, emoji })
-        .select('*, profiles(name)')
-        .single()
-
-      if (data) {
-        set({
-          messages: state.messages.map(m =>
-            m.id === messageId
-              ? { ...m, reactions: [...(m.reactions || []), data] }
-              : m
-          )
-        })
-        if (channel) {
-          channel.send({ type: 'broadcast', event: 'reaction_add', payload: { messageId, reaction: data } })
+      const res = await fetchWithAuth('/api/data/reactions', {
+        method: 'POST',
+        body: JSON.stringify({ message_id: messageId, emoji })
+      })
+      if (res.ok) {
+        const { data } = await res.json()
+        if (data) {
+          set({
+            messages: state.messages.map(m =>
+              m.id === messageId
+                ? { ...m, reactions: [...(m.reactions || []), data] }
+                : m
+            )
+          })
+          if (channel) {
+            channel.send({ type: 'broadcast', event: 'reaction_add', payload: { messageId, reaction: data } })
+          }
         }
       }
     }
@@ -560,42 +549,51 @@ export const useChatStore = create((set, get) => ({
   deleteMessage: async (messageId) => {
     const state = get()
     const msg = state.messages.find(m => m.id === messageId)
-    
-    // Delete media from storage if it exists
-    if (msg && msg.media_url) {
+
+    if (msg && msg.media_url && msg.media_url.includes('videos/')) {
       try {
-        const urlParts = msg.media_url.split('/chat-media/')
-        if (urlParts.length > 1) {
-          const filePath = urlParts[1].split('?')[0] // remove query params if any
-          await supabase.storage.from('chat-media').remove([filePath])
-        }
+        const idx = msg.media_url.indexOf('videos/')
+        const objectPath = msg.media_url.slice(idx).split('?')[0]
+        await deleteFileFromR2(objectPath)
       } catch (e) {
-        console.error('Failed to delete media from storage', e)
+        console.error('Failed to delete media from R2', e)
       }
     }
 
-    const { error } = await supabase.from('messages').delete().eq('id', messageId)
-    if (!error) {
-      set((state) => ({
-        messages: state.messages.filter(m => m.id !== messageId)
-      }))
-      
-      const channel = get().currentChannel
-      if (channel) {
-        channel.send({ type: 'broadcast', event: 'delete_message', payload: { id: messageId } })
+    try {
+      const res = await fetchWithAuth(`/api/data/messages/${messageId}`, { method: 'DELETE' })
+      if (res.ok) {
+        set((state) => ({
+          messages: state.messages.filter(m => m.id !== messageId)
+        }))
+        const channel = get().currentChannel
+        if (channel) {
+          channel.send({ type: 'broadcast', event: 'delete_message', payload: { id: messageId } })
+        }
+        return { error: null }
       }
+      return { error: new Error('Error eliminando mensaje') }
+    } catch (error) {
+      return { error }
     }
-    return { error }
   },
 
   updateChannelExpiration: async (channelId, hours) => {
     const value = hours === 0 ? null : hours
-    const { error } = await supabase.from('channels').update({ expiration_hours: value }).eq('id', channelId)
-    if (!error) {
-      set((state) => ({
-        channels: state.channels.map(c => c.id === channelId ? { ...c, expiration_hours: value } : c)
-      }))
+    try {
+      const res = await fetchWithAuth(`/api/data/channels/${channelId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ expiration_hours: value })
+      })
+      if (res.ok) {
+        set((state) => ({
+          channels: state.channels.map(c => c.id === channelId ? { ...c, expiration_hours: value } : c)
+        }))
+        return { error: null }
+      }
+      return { error: new Error('Error actualizando canal') }
+    } catch (error) {
+      return { error }
     }
-    return { error }
   }
 }))

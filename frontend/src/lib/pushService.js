@@ -2,14 +2,14 @@
  * pushService.js
  * Maneja permisos de notificación y envío de notificaciones nativas del sistema.
  * Cuando el usuario hace click → el SW redirige al mapa con la ruta activa.
+ * Respaldado 100% en Cloudflare D1 (cero Supabase).
  */
-import { supabase } from './supabase'
+import { fetchWithAuth } from './auth_client'
 
-// Utility function to convert VAPID key
 function urlB64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4)
   const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
+    .replace(/-/g, '+')
     .replace(/_/g, '/')
 
   const rawData = window.atob(base64)
@@ -20,8 +20,6 @@ function urlB64ToUint8Array(base64String) {
   }
   return outputArray
 }
-
-// ─── Permission helpers ───────────────────────────────────────────────────────
 
 export async function requestNotificationPermission() {
   if (!('Notification' in window)) return 'denied'
@@ -34,7 +32,6 @@ export function canNotify() {
   return 'Notification' in window && Notification.permission === 'granted'
 }
 
-// ─── Web Push Subscription ────────────────────────────────────────────────────
 export async function subscribeToPushNotifications(userId) {
   if (!canNotify() || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     return false
@@ -42,42 +39,39 @@ export async function subscribeToPushNotifications(userId) {
 
   try {
     const reg = await navigator.serviceWorker.ready
-    
-    // Check if already subscribed
     let subscription = await reg.pushManager.getSubscription()
-    
+
     if (!subscription) {
       const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
       if (!publicVapidKey) {
         console.warn('⚠️ VITE_VAPID_PUBLIC_KEY is not set')
         return false
       }
-      
+
       subscription = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlB64ToUint8Array(publicVapidKey)
       })
     }
 
-    // Parse subscription data
     const subJSON = subscription.toJSON()
-    
-    // Save to Supabase
-    const { error } = await supabase
-      .from('push_subscriptions')
-      .upsert({
+
+    const res = await fetchWithAuth('/api/data/push-subscriptions', {
+      method: 'POST',
+      redirectOn401: false,
+      body: JSON.stringify({
         user_id: userId,
         endpoint: subJSON.endpoint,
-        p256dh: subJSON.keys.p256dh,
-        auth: subJSON.keys.auth
-      }, { onConflict: 'endpoint' })
-      
-    if (error) {
-      console.error('Error saving push subscription:', error)
+        p256dh: subJSON.keys?.p256dh || '',
+        auth: subJSON.keys?.auth || ''
+      })
+    })
+
+    if (!res.ok) {
       return false
     }
-    
-    console.log('✅ Web Push Subscription successful')
+
+    console.log('✅ Web Push Subscription guardada en Cloudflare D1')
     return true
   } catch (error) {
     console.error('Error subscribing to push notifications:', error)
@@ -85,17 +79,6 @@ export async function subscribeToPushNotifications(userId) {
   }
 }
 
-// ─── Send alert notification ─────────────────────────────────────────────────
-/**
- * Sends a native OS push notification for a new alert.
- * If a Service Worker is registered (PWA mode), uses SW showNotification
- * so it works in background and supports action buttons.
- * Falls back to plain Notification API when SW is not available.
- *
- * @param {string} title   - Notification title
- * @param {string} body    - Notification body text
- * @param {object} alertData - { alertId, lat, lng, desc }
- */
 export async function sendAlertNotification(title, body, alertData = {}) {
   if (!canNotify()) return
 
@@ -111,12 +94,11 @@ export async function sendAlertNotification(title, body, alertData = {}) {
     renotify: true,
     data: { alertId, lat, lng, desc },
     actions: [
-      { action: 'map',   title: '🗺️ Ver en Mapa' },
-      { action: 'close', title: '✕ Cerrar'        },
+      { action: 'map', title: '🗺️ Ver en Mapa' },
+      { action: 'close', title: '✕ Cerrar' },
     ],
   }
 
-  // Prefer SW notification (works in background, supports action buttons on Android)
   if ('serviceWorker' in navigator) {
     try {
       const reg = await navigator.serviceWorker.ready
@@ -127,10 +109,8 @@ export async function sendAlertNotification(title, body, alertData = {}) {
     }
   }
 
-  // Fallback: plain Notification API (no actions, no background support)
   const notif = new Notification(title, options)
 
-  // Handle click manually for fallback (navigate to map)
   notif.onclick = () => {
     notif.close()
     let url = '/map'
@@ -144,7 +124,6 @@ export async function sendAlertNotification(title, body, alertData = {}) {
   }
 }
 
-// ─── Generic local notification (chat, system, etc.) ─────────────────────────
 export function sendLocalNotification(title, body, options = {}) {
   if (!canNotify()) return null
   return new Notification(title, {

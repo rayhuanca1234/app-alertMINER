@@ -10,7 +10,7 @@ import {
   FileSpreadsheet, File, FileArchive
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { createRealtimeChannel, removeRealtimeChannel } from '../lib/cloudflare_client'
 import { useAuthStore } from '../store/authStore'
 import { useChatStore } from '../store/chatStore'
 import { useThemeStore } from '../store/themeStore'
@@ -940,11 +940,7 @@ export default function Chat() {
     if (!activeChannel) return
     console.warn('[Realtime] Intentando conectar a:', activeChannel)
 
-    const channel = supabase.channel(`chat-room-${activeChannel}`, {
-      config: {
-        broadcast: { ack: true }
-      }
-    })
+    const channel = createRealtimeChannel(`chat-room-${activeChannel}`)
       .on('broadcast', { event: 'new_message' }, (payload) => {
         console.warn('[Broadcast] Nuevo mensaje recibido:', payload.payload)
         const data = payload.payload
@@ -1014,7 +1010,7 @@ export default function Chat() {
 
     return () => { 
       useChatStore.setState({ currentChannel: null })
-      supabase.removeChannel(channel) 
+      removeRealtimeChannel(channel) 
     }
   }, [activeChannel])
 

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { fetchWithAuth } from '../lib/auth_client'
 import { useAlertStore } from '../store/alertStore'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuthStore } from '../store/authStore'
 import AlertCard from '../components/AlertCard'
-import { ShieldCheck, RefreshCw, Loader2, Wifi, Clock, Navigation } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Loader2, Wifi } from 'lucide-react'
 
 export default function Home() {
   const { alerts, settings } = useAlertStore()
@@ -17,11 +17,10 @@ export default function Home() {
   useAlerts() // Subscribe to realtime alerts globally
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000)
+    const timer = setTimeout(() => setLoading(false), 600)
     return () => clearTimeout(timer)
   }, [])
 
-  // Show all active alerts, including the current user's own
   const activeAlerts = alerts.filter(a => a.is_active)
 
   const handleRefresh = async () => {
@@ -29,23 +28,19 @@ export default function Home() {
     const expiryMinutes = settings.alertExpiryMinutes || 60
     const cutoffDate = new Date(Date.now() - expiryMinutes * 60 * 1000)
 
-    const { data } = await supabase
-      .from('alerts')
-      .select('*, profiles(name, avatar_url)')
-      .eq('is_active', true)
-      .gte('created_at', cutoffDate.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(100)
-    
-    if (data) useAlertStore.getState().setAlerts(data)
-    setTimeout(() => setRefreshing(false), 500)
-  }
-
-  const expiryLabel = (min) => {
-    if (min < 60) return `${min} min`
-    if (min === 60) return '1 hora'
-    if (min < 1440) return `${min / 60}h`
-    return '24h'
+    try {
+      const res = await fetchWithAuth(
+        `/api/data/alerts?since=${encodeURIComponent(cutoffDate.toISOString())}&limit=100`,
+        { redirectOn401: false }
+      )
+      if (res.ok) {
+        const { data } = await res.json()
+        if (data) useAlertStore.getState().setAlerts(data)
+      }
+    } catch (e) {
+      console.error('Error refreshing alerts:', e)
+    }
+    setTimeout(() => setRefreshing(false), 400)
   }
 
   if (loading) {
@@ -53,7 +48,7 @@ export default function Home() {
       <div className="flex items-center justify-center h-full bg-[#050B14]">
         <div className="flex flex-col items-center gap-3">
           <Loader2 size={32} className="animate-spin text-blue-500" />
-          <span className="text-sm text-blue-200">Sincronizando feed...</span>
+          <span className="text-sm text-blue-200">Sincronizando feed desde Cloudflare D1...</span>
         </div>
       </div>
     )
@@ -79,7 +74,7 @@ export default function Home() {
             </h1>
             <div className="flex items-center gap-2 mt-1">
               <span className="flex items-center gap-1.5 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                <Wifi size={10} /> Online
+                <Wifi size={10} /> Cloudflare D1 Online
               </span>
               <span className="text-[11px] text-slate-400 font-medium">
                 {activeAlerts.length} alertas activas

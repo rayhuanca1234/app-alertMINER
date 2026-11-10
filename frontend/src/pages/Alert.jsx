@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { AlertTriangle, MapPin, Loader2, Send, Shield } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { AlertTriangle, MapPin, Loader2, Shield } from 'lucide-react'
+import { fetchWithAuth, getBackendUrl } from '../lib/auth_client'
+import { createRealtimeChannel } from '../lib/cloudflare_client'
 import { useAuthStore } from '../store/authStore'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { useAlertStore } from '../store/alertStore'
 import { useNotificationStore } from '../store/notificationStore'
-import { socket } from '../lib/socket'
-
-
 
 export default function Alert() {
   const { user, profile } = useAuthStore()
@@ -20,7 +18,6 @@ export default function Alert() {
   const [sent, setSent] = useState(false)
   const [countdown, setCountdown] = useState(0)
 
-  // Countdown after sending
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
@@ -46,74 +43,70 @@ export default function Alert() {
       is_active: true,
     }
 
-    const { data, error } = await supabase
-      .from('alerts')
-      .insert(alertData)
-      .select()
-      .single()
-
-    if (!error && data) {
-      // 1. Add alert immediately to local store so sender sees it right away
-      addAlert({
-        ...data,
-        profiles: { name: profile?.name, avatar_url: profile?.avatar_url }
+    try {
+      const res = await fetchWithAuth('/api/data/alerts', {
+        method: 'POST',
+        body: JSON.stringify(alertData)
       })
+      const { data, error } = await res.json()
 
-      // 2. Add confirmation to sender's notification inbox (already read, no badge)
-      addNotificationLocally({
-        id: `sent-${data.id}`,
-        user_id: user.id,
-        title: '✅ Tu alerta fue enviada',
-        message: data.description || 'Alerta comunitaria enviada correctamente',
-        type: 'alert',
-        related_id: data.id,
-        is_read: true,
-        created_at: new Date().toISOString()
-      })
+      if (res.ok && data) {
+        addAlert({
+          ...data,
+          profiles: { name: profile?.name, avatar_url: profile?.avatar_url }
+        })
 
-      // 3. Broadcast via Supabase to all other users instantly
-      const channel = supabase.channel('global-alerts', {
-        config: { broadcast: { ack: true } }
-      })
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          channel.send({
-            type: 'broadcast',
-            event: 'new_alert',
-            payload: {
-              ...data,
-              profiles: { name: profile?.name, avatar_url: profile?.avatar_url },
-              sender_name: profile?.name || user.email
-            }
-          })
+        addNotificationLocally({
+          id: `sent-${data.id}`,
+          user_id: user.id,
+          title: '✅ Tu alerta fue enviada',
+          message: data.description || 'Alerta comunitaria enviada correctamente',
+          type: 'alert',
+          related_id: data.id,
+          is_read: true,
+          created_at: new Date().toISOString()
+        })
+
+        const channel = createRealtimeChannel('global-alerts')
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.send({
+              type: 'broadcast',
+              event: 'new_alert',
+              payload: {
+                ...data,
+                profiles: { name: profile?.name, avatar_url: profile?.avatar_url },
+                sender_name: profile?.name || user.email
+              }
+            })
+          }
+        })
+
+        try {
+          const backendUrl = getBackendUrl()
+          fetch(`${backendUrl}/api/push/broadcast`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              alert: {
+                ...data,
+                avatar_url: profile?.avatar_url
+              }
+            })
+          }).catch(e => console.error('Error triggering push:', e))
+        } catch (e) {
+          console.error('Error with push request:', e)
         }
-      })
 
-      // 4. Wake up Cloud Run server and trigger Web Push broadcast
-      try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
-        fetch(`${backendUrl}/api/push/broadcast`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ 
-            alert: {
-              ...data,
-              avatar_url: profile?.avatar_url
-            } 
-          })
-        }).catch(e => console.error('Error triggering push:', e));
-      } catch (e) {
-        console.error('Error with push request:', e);
+        setSent(true)
+        setCountdown(30)
+        setDescription('')
+        setSelectedType(null)
+      } else {
+        alert('Error al enviar alerta: ' + (error || 'desconocido'))
       }
-
-      setSent(true)
-      setCountdown(30) // Cooldown 30 seconds
-      setDescription('')
-      setSelectedType(null)
-    } else {
-      alert('Error al enviar alerta: ' + (error?.message || 'desconocido'))
+    } catch (e) {
+      alert('Error al enviar alerta: ' + e.message)
     }
 
     setSending(false)
@@ -221,6 +214,7 @@ export default function Alert() {
     </div>
   )
 }
+
 const ALERT_TYPES = [
   { id: 'policias', label: '👮🚨 Atraco de policías', color: 'from-red-600 to-red-800' },
   { id: 'robo', label: '🔫 Robo armado', color: 'from-amber-600 to-amber-800' },
@@ -228,4 +222,4 @@ const ALERT_TYPES = [
   { id: 'accidente', label: '💥 Accidente/Emergencia', color: 'from-purple-600 to-purple-800' },
   { id: 'bloqueo', label: '🚧 Bloqueo de vía', color: 'from-yellow-600 to-yellow-800' },
   { id: 'otro', label: '⚠️ Otra amenaza', color: 'from-slate-600 to-slate-800' },
-];
+]

@@ -1,15 +1,14 @@
 import { useEffect, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { fetchWithAuth } from '../lib/auth_client'
+import { createRealtimeChannel, removeRealtimeChannel } from '../lib/cloudflare_client'
 import { useAlertStore } from '../store/alertStore'
 import { useAuthStore } from '../store/authStore'
-import { sendAlertNotification } from '../lib/pushService'
 
 export function useAlerts() {
   const { alerts, setAlerts, addAlert, updateAlert, cleanExpiredAlerts, settings } = useAlertStore()
   const { user } = useAuthStore()
   const audioRef = useRef(null)
 
-  // Play alert sound
   const playAlertSound = () => {
     try {
       if (!audioRef.current) {
@@ -23,37 +22,32 @@ export function useAlerts() {
     }
   }
 
-  // Native notifications are now handled by Web Push (sw.js)
-
   useEffect(() => {
-    // Request notification permissions
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission()
     }
 
-    // Calculate cutoff time based on expiry setting
     const expiryMinutes = settings.alertExpiryMinutes || 60
     const cutoffDate = new Date(Date.now() - expiryMinutes * 60 * 1000)
 
-    // Fetch only active alerts within expiry window
     const fetchAlerts = async () => {
-      const { data, error } = await supabase
-        .from('alerts')
-        .select('*, profiles(name, avatar_url)')
-        .eq('is_active', true)
-        .gte('created_at', cutoffDate.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(100)
-      
-      if (!error && data) setAlerts(data)
+      try {
+        const res = await fetchWithAuth(
+          `/api/data/alerts?since=${encodeURIComponent(cutoffDate.toISOString())}&limit=100`,
+          { redirectOn401: false }
+        )
+        if (res.ok) {
+          const { data } = await res.json()
+          if (data) setAlerts(data)
+        }
+      } catch (e) {
+        console.warn('Error fetching alerts from D1:', e)
+      }
     }
 
     fetchAlerts()
 
-    // Subscribe to realtime alert changes via Broadcast
-    const channel = supabase.channel('global-alerts', {
-      config: { broadcast: { ack: true } }
-    })
+    const channel = createRealtimeChannel('global-alerts')
       .on('broadcast', { event: 'new_alert' }, (payload) => {
         const alert = payload.payload
         const isOwn = alert.user_id === user?.id
@@ -61,7 +55,6 @@ export function useAlerts() {
         addAlert(alert)
         playAlertSound()
 
-        // Add to notification inbox for everyone (including sender)
         import('../store/notificationStore').then(module => {
           const addLocally = module.useNotificationStore.getState().addNotificationLocally
           addLocally({
@@ -71,7 +64,7 @@ export function useAlerts() {
             message: alert.description || 'Alerta comunitaria',
             type: 'alert',
             related_id: alert.id,
-            is_read: isOwn, // mark own alert as already read so badge doesn't count it
+            is_read: isOwn,
             created_at: new Date().toISOString()
           })
         })
@@ -81,16 +74,14 @@ export function useAlerts() {
       })
       .subscribe()
 
-    // Set up periodic cleanup of expired alerts (every 60 seconds)
     const cleanupInterval = setInterval(() => {
       cleanExpiredAlerts()
     }, 60 * 1000)
 
-    // Run initial cleanup
     cleanExpiredAlerts()
 
     return () => {
-      supabase.removeChannel(channel)
+      removeRealtimeChannel(channel)
       clearInterval(cleanupInterval)
     }
   }, [user?.id, settings.alertExpiryMinutes])

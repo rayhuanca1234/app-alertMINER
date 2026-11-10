@@ -1,74 +1,103 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import {
+  getSession,
+  onAuthStateChange,
+  fetchWithAuth,
+  signOut as cfSignOut,
+  signInWithGoogle as cfSignInWithGoogle,
+  signInWithEmail as cfSignInWithEmail,
+  registerWithEmail as cfRegisterWithEmail
+} from '../lib/auth_client'
 
 export const useAuthStore = create((set, get) => ({
   user: null,
   session: null,
   profile: null,
+  subscription: null,
   loading: true,
 
   initialize: async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user || null
-    set({ session, user, loading: false })
-
-    if (user) {
-      get().fetchProfile(user.id)
+    try {
+      const session = await getSession()
+      const user = session?.user || null
+      set({
+        session,
+        user,
+        profile: user,
+        subscription: user?.subscription || null,
+        loading: false
+      })
+    } catch {
+      set({ session: null, user: null, profile: null, loading: false })
     }
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
+    onAuthStateChange(async (_event, session) => {
       const user = session?.user || null
       set({ session, user })
       if (user) {
-        get().fetchProfile(user.id)
+        await get().fetchProfile()
       } else {
-        set({ profile: null })
+        set({ profile: null, subscription: null })
       }
     })
   },
 
-  fetchProfile: async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (error && error.code === 'PGRST116') {
-      // Profile doesn't exist yet — create it
-      const user = get().user
-      const name = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Minero'
-      const avatar_url = user?.user_metadata?.avatar_url || null
-
-      const { data: newProfile } = await supabase
-        .from('profiles')
-        .insert({ id: userId, name, avatar_url })
-        .select()
-        .single()
-
-      if (newProfile) set({ profile: newProfile })
-    } else if (data) {
-      set({ profile: data })
+  fetchProfile: async () => {
+    try {
+      const res = await fetchWithAuth('/api/user/profile', { redirectOn401: false })
+      if (res.ok) {
+        const data = await res.json()
+        set({
+          profile: data,
+          user: { ...(get().user || {}), ...data },
+          subscription: data.subscription || null
+        })
+      }
+    } catch (e) {
+      console.error('[authStore] Error fetching profile:', e)
     }
   },
 
   updateProfile: async (updates) => {
-    const userId = get().user?.id
-    if (!userId) return
+    try {
+      const res = await fetchWithAuth('/api/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify(updates)
+      })
+      const data = await res.json()
+      if (res.ok && data) {
+        set({
+          profile: { ...(get().profile || {}), ...data },
+          user: { ...(get().user || {}), ...data }
+        })
+        return { data, error: null }
+      }
+      return { data: null, error: new Error(data?.error || 'Error actualizando perfil') }
+    } catch (error) {
+      return { data: null, error }
+    }
+  },
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', userId)
-      .select()
-      .single()
+  signInWithGoogle: () => {
+    cfSignInWithGoogle()
+  },
 
-    if (!error && data) set({ profile: data })
-    return { data, error }
+  signInWithEmail: async (email, password) => {
+    const session = await cfSignInWithEmail(email, password)
+    set({ session, user: session.user, profile: session.user })
+    await get().fetchProfile()
+    return session
+  },
+
+  registerWithEmail: async (payload) => {
+    const session = await cfRegisterWithEmail(payload)
+    set({ session, user: session.user, profile: session.user })
+    await get().fetchProfile()
+    return session
   },
 
   signOut: async () => {
-    await supabase.auth.signOut()
-    set({ user: null, session: null, profile: null })
+    await cfSignOut()
+    set({ user: null, session: null, profile: null, subscription: null })
   }
 }))

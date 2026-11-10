@@ -1,15 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Heart, MessageCircle, Share2, MoreHorizontal, Download, Flag, EyeOff, Send } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { fetchWithAuth } from '../lib/auth_client';
 import { useAuthStore } from '../store/authStore';
 
-// Individual Slide Component to handle its own video playback and Supabase data
 const MediaSlide = ({ item, isActive }) => {
   const videoRef = useRef(null);
   const { user } = useAuthStore();
   
   const [isLiked, setIsLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0); // Strict zero base
+  const [likesCount, setLikesCount] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   
@@ -17,12 +16,10 @@ const MediaSlide = ({ item, isActive }) => {
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
 
-  // A UUID is exactly 36 characters long. We slice it to safely extract it even if there's a "-index" suffix
   const actualMessageId = String(item.id).slice(0, 36);
   const parts = String(item.id).split('-');
   const mediaIndex = parts.length > 5 ? parseInt(parts[5], 10) : 0;
 
-  // Play/Pause based on visibility and View count
   useEffect(() => {
     let viewed = false;
     
@@ -35,61 +32,32 @@ const MediaSlide = ({ item, isActive }) => {
       }
     }
 
-    if (isActive && !viewed) {
-      // Increment view in Supabase with media_index and user_id (unique views)
-      supabase.rpc('increment_media_views', { msg_id: actualMessageId, m_index: mediaIndex, u_id: user.id }).then(({ error }) => {
-        if (error) console.error('Error incrementing views:', error);
-      });
+    if (isActive && !viewed && user?.id) {
+      fetchWithAuth('/api/data/media/view', {
+        method: 'POST',
+        redirectOn401: false,
+        body: JSON.stringify({ message_id: actualMessageId, media_index: mediaIndex })
+      }).catch(e => console.error('Error incrementing views:', e));
       viewed = true;
     }
-  }, [isActive, item.isVideo, actualMessageId, mediaIndex, user.id]);
+  }, [isActive, item.isVideo, actualMessageId, mediaIndex, user?.id]);
 
-  // Fetch Likes and Comments when active
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !user?.id) return;
 
     const fetchInteractions = async () => {
       try {
-        // Fetch true views (if you want to use it as base or just display it)
-        const { data: viewData } = await supabase
-          .from('media_views')
-          .select('views_count')
-          .eq('message_id', actualMessageId)
-          .eq('media_index', mediaIndex)
-          .maybeSingle();
-        
-        const realViews = viewData ? viewData.views_count : 0;
-
-        // Check if user liked it
-        const { data: likeData } = await supabase
-          .from('media_likes')
-          .select('id')
-          .eq('message_id', actualMessageId)
-          .eq('media_index', mediaIndex)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        setIsLiked(!!likeData);
-
-        // Get total likes count
-        const { count } = await supabase
-          .from('media_likes')
-          .select('*', { count: 'exact', head: true })
-          .eq('message_id', actualMessageId)
-          .eq('media_index', mediaIndex);
-          
-        if (count !== null) setLikesCount(count); // Strictly count, no fake base
-
-        // Fetch comments
         setLoadingComments(true);
-        const { data: commentsData } = await supabase
-          .from('media_comments')
-          .select('*, profiles(name, avatar_url)')
-          .eq('message_id', actualMessageId)
-          .eq('media_index', mediaIndex)
-          .order('created_at', { ascending: false });
-          
-        if (commentsData) setComments(commentsData);
+        const res = await fetchWithAuth(
+          `/api/data/media/interactions?message_id=${encodeURIComponent(actualMessageId)}&media_index=${mediaIndex}`,
+          { redirectOn401: false }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setIsLiked(Boolean(data.is_liked));
+          setLikesCount(Number(data.likes_count || 0));
+          setComments(data.comments || []);
+        }
       } catch (err) {
         console.error('Error fetching interactions:', err);
       } finally {
@@ -98,26 +66,16 @@ const MediaSlide = ({ item, isActive }) => {
     };
 
     fetchInteractions();
-  }, [isActive, actualMessageId, mediaIndex, user.id]);
+  }, [isActive, actualMessageId, mediaIndex, user?.id]);
 
   const handleLike = async () => {
     try {
-      if (isLiked) {
-        setIsLiked(false);
-        setLikesCount(prev => prev - 1);
-        await supabase
-          .from('media_likes')
-          .delete()
-          .eq('message_id', actualMessageId)
-          .eq('media_index', mediaIndex)
-          .eq('user_id', user.id);
-      } else {
-        setIsLiked(true);
-        setLikesCount(prev => prev + 1);
-        await supabase
-          .from('media_likes')
-          .insert({ message_id: actualMessageId, user_id: user.id, media_index: mediaIndex });
-      }
+      setIsLiked(prev => !prev);
+      setLikesCount(prev => (isLiked ? Math.max(0, prev - 1) : prev + 1));
+      await fetchWithAuth('/api/data/media/like', {
+        method: 'POST',
+        body: JSON.stringify({ message_id: actualMessageId, media_index: mediaIndex })
+      });
     } catch (err) {
       console.error('Error toggling like:', err);
     }
@@ -130,16 +88,21 @@ const MediaSlide = ({ item, isActive }) => {
     const tempComment = {
       id: Date.now(),
       content: newComment,
-      profiles: { name: user.email.split('@')[0], avatar_url: null }
+      profiles: { name: user?.email?.split('@')[0] || 'Minero', avatar_url: null }
     };
     
     setComments([tempComment, ...comments]);
     setNewComment('');
 
     try {
-      await supabase
-        .from('media_comments')
-        .insert({ message_id: actualMessageId, user_id: user.id, media_index: mediaIndex, content: tempComment.content });
+      await fetchWithAuth('/api/data/media/comment', {
+        method: 'POST',
+        body: JSON.stringify({
+          message_id: actualMessageId,
+          media_index: mediaIndex,
+          content: tempComment.content
+        })
+      });
     } catch (err) {
       console.error('Error adding comment:', err);
     }
@@ -330,7 +293,6 @@ export default function TikTokViewer({ mediaList, initialIndex, onClose, onLoadM
   const [activeIndex, setActiveIndex] = useState(initialIndex);
 
   useEffect(() => {
-    // Scroll to the initial index on mount
     if (containerRef.current && initialIndex >= 0) {
       const height = window.innerHeight;
       containerRef.current.scrollTop = initialIndex * height;
@@ -349,7 +311,6 @@ export default function TikTokViewer({ mediaList, initialIndex, onClose, onLoadM
       setActiveIndex(index);
     }
     
-    // Load more when reaching near the end
     if (hasMore && onLoadMore && index >= mediaList.length - 2) {
       onLoadMore();
     }

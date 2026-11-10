@@ -83,8 +83,9 @@ const FEATURES = [
 const TECH_STACK = [
   { label: 'Frontend', value: 'Vite + React + PWA', icon: '⚡' },
   { label: 'Mapa', value: 'Leaflet + Turf.js', icon: '🗺️' },
-  { label: 'Base de datos', value: 'Supabase (Postgres)', icon: '🗄️' },
-  { label: 'Tiempo real', value: 'Supabase Broadcast', icon: '📡' },
+  { label: 'Base de datos', value: 'Cloudflare D1 (SQL)', icon: '🗄️' },
+  { label: 'Almacenamiento', value: 'Cloudflare R2 (S3)', icon: '☁️' },
+  { label: 'Autenticación', value: 'Google OAuth 2.0 + fr_ Keys', icon: '🔐' },
   { label: 'Backend', value: 'Fastify + Socket.IO', icon: '🔧' },
   { label: 'Deploy', value: 'Google Cloud Run', icon: '☁️' },
 ]

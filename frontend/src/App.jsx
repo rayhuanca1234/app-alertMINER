@@ -2,10 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { useThemeStore } from './store/themeStore'
-import { useAlerts } from './hooks/useAlerts'
 import { useNotificationStore } from './store/notificationStore'
-import { subscribeToPushNotifications } from './lib/pushService'
-import { supabase } from './lib/supabase'
+import { createRealtimeChannel, removeRealtimeChannel } from './lib/cloudflare_client'
 import BottomNav from './components/BottomNav'
 import SideDrawer from './components/SideDrawer'
 import Home from './pages/Home'
@@ -16,7 +14,6 @@ import Profile from './pages/Profile'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import About from './pages/About'
-import { socket } from './lib/socket'
 import { Loader2, Menu, Bell } from 'lucide-react'
 
 const PrivateRoute = ({ children }) => {
@@ -52,7 +49,6 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
-      // Subscribe to Web Push Notifications (if supported and permitted)
       import('./lib/pushService').then(({ requestNotificationPermission, subscribeToPushNotifications }) => {
         requestNotificationPermission().then(status => {
           if (status === 'granted') {
@@ -60,32 +56,21 @@ export default function App() {
           }
         })
       })
-      
-      // Fetch initial notifications
+
       fetchNotifications(user.id)
-      
-      // Listen for system notifications via Broadcast
-      const notifChannel = supabase.channel('global-notifications', {
-        config: { broadcast: { ack: true } }
-      })
+
+      const notifChannel = createRealtimeChannel('global-notifications')
         .on('broadcast', { event: 'new_notification' }, (payload) => {
           if (payload.payload?.sender_id !== user.id) {
             addNotificationLocally(payload.payload)
           }
         })
         .subscribe()
-        
+
       useNotificationStore.getState().setGlobalChannel(notifChannel)
-      
-      // Listen for broadcast alerts from other users via socket
-      // socket.on('new_alert', (alertData) => {
-      //   console.log('New alert received via socket:', alertData)
-      // })
 
       return () => {
-        // socket.off('new_alert')
-        // socket.disconnect()
-        supabase.removeChannel(notifChannel)
+        removeRealtimeChannel(notifChannel)
       }
     }
   }, [user, fetchNotifications, addNotificationLocally])
